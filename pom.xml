@@ -19,7 +19,7 @@
 
 	<name>Fast Median Temporal 2</name>
 	<description>A Fast Median Temporal Filter using the GPU</description>
-	<url>https://wurgobes.com/imagej/gauss-filtering/</url>
+	<url>https://github.com/HohlbeinLab/FTM2</url>
 	<inceptionYear>2020</inceptionYear>
 	<organization>
 		<name>Wageningen University</name>

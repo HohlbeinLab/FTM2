@@ -38,22 +38,27 @@ public class FTM2<T> implements PlugInFilter {
         
 	@Override
 	public int setup(String arg, ImagePlus imp) {
+                //TODO
+                //Handle closure of the file select more graciously
+                //Add an about
+                //Hyperstack support?
+                //NOTE that the final implementation probably wont have the entire stack loaded into memory as a Imagestack, at most as a virtualstack
 		if (arg.equals("about")) {
                         IJ.showMessage("TODO ABOUT");
 			return DONE;
 		}
                 
+                
                 boolean done;
-                do {
+                do { // Try to get a stack and if not found, let the user select a new file.
                     done = true;
                     try {
                         stack = imp.getStack();                                             
-                        IJ.showMessage("succes, got a stack");
-                    } catch (Exception e) {
+                    } catch (Exception e) { //No stack or no image was found.
                         done = false;                       
-                        String filePath = new OpenDialog("Please select a stack").getPath();                       
-                        imp = new Opener().openImage(filePath);
-                        imp.show();
+                        String filePath = new OpenDialog("Please select a stack").getPath(); //Let the user select a stack                   
+                        imp = new Opener().openImage(filePath); //Open the selected file
+                        imp.show(); //Show it and try again
                     }
                 } while(!done) ;
 
@@ -65,7 +70,8 @@ public class FTM2<T> implements PlugInFilter {
 
 	@Override
 	public void run(ImageProcessor ip) {
-            
+                //This will first be getting a initial implementation to ensure it works
+                //If not yet implemented then, it will be ensured files>20GB will work without being loaded into memory
                 
                 CLIJ2 clij2 = CLIJ2.getInstance();
 
