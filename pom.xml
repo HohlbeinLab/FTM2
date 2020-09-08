@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+		http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>29.2.1</version>
+		<relativePath />
+	</parent>
+
+	<groupId>com.wurgobes</groupId>
+	<artifactId>FTM2</artifactId>
+	<version>0.1.0-SNAPSHOT</version>
+
+
+	<name>Fast Median Temporal 2</name>
+	<description>A Fast Median Temporal Filter using the GPU</description>
+	<url>https://wurgobes.com/imagej/gauss-filtering/</url>
+	<inceptionYear>2020</inceptionYear>
+	<organization>
+		<name>Wageningen University</name>
+		<url>https://wur.nl/</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>Simplified BSD License</name>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<id>mgobes</id>
+			<name>Martijn Gobes</name>
+			<roles>
+				<role>founder</role>
+				<role>lead</role>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+		</developer>
+	</developers>
+
+
+	<mailingLists>
+		<mailingList>
+			<name>Image.sc Forum</name>
+			<archive>https://forum.image.sc/tags/imagej</archive>
+		</mailingList>
+	</mailingLists>
+
+	<scm>
+		<connection>scm:git:git://github.com/imagej/example-imagej-command</connection>
+		<developerConnection>scm:git:git@github.com:imagej/example-imagej-command</developerConnection>
+		<tag>HEAD</tag>
+		<url>https://github.com/imagej/example-imagej-command</url>
+	</scm>
+	<issueManagement>
+		<system>GitHub Issues</system>
+		<url>https://github.com/imagej/example-imagej-command/issues</url>
+	</issueManagement>
+	<ciManagement>
+		<system>None</system>
+	</ciManagement>
+
+	<properties>
+		<package-name>com.wurgobes.imagej</package-name>
+		<main-class>com.wurgobes.imagej.FTM2</main-class>
+		<license.licenseName>bsd_2</license.licenseName>
+		<license.copyrightOwners>WUR, Inc.</license.copyrightOwners>
+		<scijava.app.directory>C:\Users\Martijn\Desktop\Thesis2020\ImageJ\fiji-win64\Fiji.app</scijava.app.directory>
+	</properties>
+
+	<repositories>
+		<repository>
+			<id>scijava.public</id>
+			<url>https://maven.scijava.org/content/groups/public</url>
+		</repository>
+		<repository>
+			<id>clij</id>
+			<url>http://dl.bintray.com/haesleinhuepf/clij</url>
+		</repository>
+	</repositories>
+
+	<dependencies>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.haesleinhuepf</groupId>
+			<artifactId>clij2_</artifactId>
+			<version>2.1.1.0</version>
+		</dependency>
+	</dependencies>
+	
+</project>
