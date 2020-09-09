@@ -99,6 +99,11 @@
 			<artifactId>clij2_</artifactId>
 			<version>2.1.1.0</version>
 		</dependency>
+                <dependency>
+			<groupId>idr</groupId>
+                        <artifactId>bio-formats_plugins</artifactId>
+                        <version>0.6.1</version>
+		</dependency>
 	</dependencies>
 	
 </project>
