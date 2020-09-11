@@ -144,14 +144,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         
 
         IJ.showStatus("Creating Virtualstack(s)");
+        Integer Stack_no = 0;
         for (int i = 0; i < listOfFiles.length; i++) {                       
             if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith(".tif")) {
-
+                    
                 vstacks.add(IJ.openVirtual(listOfFiles[i].getPath()).getStack());
-                Integer current_stack_size = vstacks.get(i).size();
+                Integer current_stack_size = vstacks.get(Stack_no).size();
                 slice_intervals.add(current_stack_size + total_size);
                 total_size += current_stack_size;
-                
+                Stack_no++;
                 System.out.print(Integer.toString(i) + ", " + listOfFiles[i].getPath() + ", " + Integer.toString(current_stack_size) + "\n");
             } else {
                 //IJ.error("Error: File is not file.");
@@ -215,21 +216,14 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         Integer stack_index = 0;
         Integer prev_stack_size = 0;
         
-        System.out.println(slice_size); 
-        System.out.println(bit_depth);
-        System.out.println(getFreeMemory(false));
-        
-        Integer slices_that_fit = (int)(getFreeMemory(true)/slice_size)/(2/8);
+        Integer slices_that_fit = (int)(getFreeMemory(false)/slice_size/2*8);
         if (slices_that_fit > total_size) slices_that_fit = total_size;
         
         short[][] v_pixels = new short[dimension][slices_that_fit]; 
         
         Integer[] loaded_range = {1, slices_that_fit};
         
-        
-     
-        System.out.println(total_size);
-        System.out.println(slices_that_fit);
+
 
         //Populate array
         stack = vstacks.get(0);
