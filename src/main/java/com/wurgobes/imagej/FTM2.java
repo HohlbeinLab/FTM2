@@ -145,7 +145,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         IJ.showStatus("Creating Virtualstack(s)");
         for (int i = 0; i < listOfFiles.length; i++) {                       
-            if (listOfFiles[i].isFile()) {
+            if (listOfFiles[i].isFile() && listOfFiles[i].getName().contains("tif")) {
 
                 vstacks.add(IJ.openVirtual(listOfFiles[i].getPath()).getStack());
                 Integer current_stack_size = vstacks.get(i).size();
@@ -217,7 +217,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         
         System.out.println(slice_size); 
         System.out.println(bit_depth);
-        Integer slices_that_fit = (int)(getFreeMemory(true)/slice_size)/(2*8);
+        
+        Integer slices_that_fit = (int)(getFreeMemory(true)/slice_size)/(2/8);
         if (slices_that_fit > total_size) slices_that_fit = total_size;
         
         short[][] v_pixels = new short[dimension][slices_that_fit]; 
