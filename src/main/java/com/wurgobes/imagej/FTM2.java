@@ -163,8 +163,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         }
         
         dimension = vstacks.get(0).getWidth() * vstacks.get(0).getHeight(); //Amount of pixels per image
-        slice_size = dimension * (vstacks.get(0).getBitDepth()/8); //Byter per slice
-        bit_depth = vstacks.get(0).getBitDepth();
+        bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+        slice_size = dimension * bit_depth; //Bits per slice
+        
         
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
@@ -214,7 +215,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         Integer stack_index = 0;
         Integer prev_stack_size = 0;
         
-        Integer slices_that_fit = (int)(getFreeMemory(true)/slice_size)/2;
+        System.out.println(slice_size); 
+        System.out.println(bit_depth);
+        Integer slices_that_fit = (int)(getFreeMemory(true)/slice_size)/(2*8);
         if (slices_that_fit > total_size) slices_that_fit = total_size;
         
         short[][] v_pixels = new short[dimension][slices_that_fit]; 
@@ -222,11 +225,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         Integer[] loaded_range = {1, slices_that_fit};
         
         
-
-        
+     
         System.out.println(total_size);
         System.out.println(slices_that_fit);
-        System.out.println(ObjectSizeCalculator.getObjectSize(v_pixels));
 
         //Populate array
         stack = vstacks.get(0);
@@ -241,7 +242,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 v_pixels[j][i] = pixels[j];
             }
         }
-        System.out.println(ObjectSizeCalculator.getObjectSize(v_pixels));
+
         long stopTime = (System.nanoTime()- startTime);
         IJ.showMessage("Script took " + String.format("%.3f", (double)stopTime/1000000000) + " s");
     }
