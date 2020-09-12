@@ -7,8 +7,10 @@ import ij.plugin.*;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.*;
+import ij.io.FileSaver;
 
-
+import org.scijava.plugin.*;
+import org.scijava.Priority;
 import org.scijava.command.Command;
 
 import net.haesleinhuepf.clij.CLIJ;
@@ -16,12 +18,13 @@ import net.haesleinhuepf.clij.clearcl.ClearCLBuffer;
 import net.haesleinhuepf.clij2.CLIJ2;
 
 
-import org.scijava.plugin.*;
-import org.scijava.Priority;
+import com.wurgobes.imagej.MiscFunctions;
 
 
 import java.io.File;
 import java.util.*; 
+import java.awt.image.ColorModel;
+
 import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
 
@@ -61,6 +64,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     
     private Integer dimension;
     
+    private Integer slice_height;
+    private Integer slice_width;
+    
     private Integer slice_size;
     
     private final long max_bytes = Runtime.getRuntime().maxMemory();
@@ -74,7 +80,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         return Runtime.getRuntime().freeMemory();
     }
     
-    
+    public boolean saveShortPixels(final String path, short[] pixels, ColorModel cm){
+        ImagePlus tmp = new ImagePlus("", new ShortProcessor(slice_width, slice_height, pixels, cm).duplicate());
+        try {
+                return new FileSaver(tmp).saveAsTiff(path);
+        } catch (Exception e) {
+                return false;
+        }
+    }
+
     @Override
     public int setup(String arg, ImagePlus imp) {
         //TODO
@@ -163,8 +177,17 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             IJ.error("Error: Stack must have size larger than 1.");
         }
         
-        dimension = vstacks.get(0).getWidth() * vstacks.get(0).getHeight(); //Amount of pixels per image
+        slice_height = vstacks.get(0).getHeight();
+        slice_width = vstacks.get(0).getWidth();
+        dimension = slice_width * slice_height; //Amount of pixels per image
         bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+
+        if (bit_depth == 0) bit_depth = 16;
+        else if (bit_depth <= 8) bit_depth = 8;
+        else if (bit_depth <= 16) bit_depth = 16;
+        else if (bit_depth <= 32) bit_depth = 32;
+        else IJ.error("this is very wrong");
+
         slice_size = dimension * bit_depth; //Bits per slice
         
         
@@ -210,37 +233,84 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         
         long startTime = System.nanoTime();
         
-        VirtualStack temp_stack = new VirtualStack(vstacks.get(0).getWidth(), vstacks.get(0).getHeight(), total_size);
+        ColorModel cm = vstacks.get(0).getColorModel();
+
+        final VirtualStack final_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
+        final_stack.setBitDepth(bit_depth);
+               
+        
         short[] pixels = new short[dimension];
         short[] new_pixels = new short[dimension];
         Integer stack_index = 0;
         Integer prev_stack_size = 0;
         
-        Integer slices_that_fit = (int)(getFreeMemory(false)/slice_size/2*8);
+        Integer slices_that_fit = (int)(max_bytes/slice_size/2*8);
+        System.out.println(slices_that_fit);
         if (slices_that_fit > total_size) slices_that_fit = total_size;
         
         short[][] v_pixels = new short[dimension][slices_that_fit]; 
+        short[] medians = new short[dimension];
         
-        Integer[] loaded_range = {1, slices_that_fit};
+        Integer[] loaded_range = {1, slices_that_fit};             
         
-
-
         //Populate array
         stack = vstacks.get(0);
-        for(int i = start; i < slices_that_fit; i++){
+        for(int i = start; i <= slices_that_fit; i++){
             if(i > slice_intervals.get(stack_index)){
                 prev_stack_size += stack.size();
                 stack_index += 1;
                 stack = vstacks.get(stack_index);
             }
             pixels = (short[])stack.getPixels(i - prev_stack_size);
+
             for (int j=0; j<dimension; j++){
-                v_pixels[j][i] = pixels[j];
+                v_pixels[j][i-1] = pixels[j];
             }
         }
+        boolean final_images = false;
+        short newval;
+
+        for(int i = loaded_range[0]; i <= loaded_range[1]; i++){ 
+            if(!final_images) final_images = (i + window/2 > total_size);
+            
+            if (!final_images && loaded_range[0] == 1 && i <= window / 2){ //start of images, so any median for the first window frames wont change
+                if(i == 1){
+                    for (int j=0; j<dimension; j++){                    
+                        medians[j] = (short)MiscFunctions.getMedian(Arrays.copyOfRange(v_pixels[j], 0, window));                    
+                        //System.out.println(Arrays.toString(Arrays.copyOfRange(v_pixels[j], 0, window)));
+                        //System.out.println(medians[j]);
+                    }
+                }
+                
+                for (int j=0; j<dimension; j++){  
+                    newval = (short)(v_pixels[j][i-1] - medians[j]);
+                    new_pixels[j] = newval < 0 ? 0 : newval;
+                    //new_pixels[j] = v_pixels[j][i-1];
+                }
+                
+
+                new_pixels = new_pixels.clone();
+              
+ 
+                String save_path = target_dir + "\\slice" + Integer.toString(i) + ".tif";
+                
+                if(!saveShortPixels(save_path, new_pixels, cm)){
+                    IJ.error("Failed to write to:" + save_path);
+                    System.exit(0);
+                }
+                final_stack.addSlice("slice" + Integer.toString(i) + ".tif");
+                System.gc();
+  
+            } else if (final_images ) { //end of images, so any median for the last window frames wont change
+            
+            } else {
+                
+            }
+        }
+        new ImagePlus("test", final_stack).show(); //Displaying the final stack
 
         long stopTime = (System.nanoTime()- startTime);
-        IJ.showMessage("Script took " + String.format("%.3f", (double)stopTime/1000000000) + " s");
+        System.out.println("Script took " + String.format("%.3f", (double)stopTime/1000000000) + " s");
     }
 
 

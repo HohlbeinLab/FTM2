@@ -29,7 +29,7 @@ String getNonHeap() {
     return String.format("u=%3.2f m=%3.2f i=%3.2f Mb", u, m, i);
 }
     
-        System.out.println(ObjectSizeCalculator.getObjectSize(vstacks));
+       System.out.println(ObjectSizeCalculator.getObjectSize(vstacks)); 
         System.out.println(ObjectSizeCalculator.getObjectSize(vstacks.get(0)));
         System.out.println(ObjectSizeCalculator.getObjectSize(vstacks.get(1)));
         System.out.println(ObjectSizeCalculator.getObjectSize(stack));
