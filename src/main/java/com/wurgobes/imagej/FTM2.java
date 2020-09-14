@@ -27,14 +27,11 @@ import java.awt.image.ColorModel;
 
 import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
+import static java.lang.Math.min;
 
 
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 public class FTM2 implements ExtendedPlugInFilter, Command {
-    
-
-    //@Parameter
-    private ImageStack stack;
 
 
     //@Parameter
@@ -188,6 +185,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         else if (bit_depth <= 32) bit_depth = 32;
         else IJ.error("this is very wrong");
 
+
+
         slice_size = dimension * bit_depth; //Bits per slice
         
         
@@ -236,81 +235,122 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         ColorModel cm = vstacks.get(0).getColorModel();
 
         final VirtualStack final_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
+        final ImageStack testing = new ImageStack(slice_width, slice_height);
+
         final_stack.setBitDepth(bit_depth);
                
         
-        short[] pixels = new short[dimension];
+
         short[] new_pixels = new short[dimension];
-        Integer stack_index = 0;
-        Integer prev_stack_size = 0;
+
         
         Integer slices_that_fit = (int)(max_bytes/slice_size/2*8);
-        System.out.println(slices_that_fit);
-        if (slices_that_fit > total_size) slices_that_fit = total_size;
-        
+
+        slices_that_fit = min(min(slices_that_fit, end), total_size);
+
+
+
         short[][] v_pixels = new short[dimension][slices_that_fit]; 
         short[] medians = new short[dimension];
-        
-        Integer[] loaded_range = {1, slices_that_fit};             
-        
+
+        /*
         //Populate array
-        stack = vstacks.get(0);
+
         for(int i = start; i <= slices_that_fit; i++){
             if(i > slice_intervals.get(stack_index)){
-                prev_stack_size += stack.size();
+                prev_stack_sizes += stack.size();
                 stack_index += 1;
                 stack = vstacks.get(stack_index);
             }
-            pixels = (short[])stack.getPixels(i - prev_stack_size);
+            short[] pixels = (short[])stack.getPixels(i - prev_stack_sizes);
 
             for (int j=0; j<dimension; j++){
                 v_pixels[j][i-1] = pixels[j];
             }
         }
-        boolean final_images = false;
-        short newval;
+        */
 
-        for(int i = loaded_range[0]; i <= loaded_range[1]; i++){ 
-            if(!final_images) final_images = (i + window/2 > total_size);
+        ImageStack stack = vstacks.get(0);
+        int[] loaded_range = {0, 0};
+        boolean final_images = false;
+        boolean final_median_created = false;
+        int stack_index = 0;
+        int prev_stack_sizes = 0;
+        short newval;
+        int offset = 0;
+
+
+        for(int i = start; i <= end; i++){
+            IJ.showStatus("Frame " + String.valueOf(i) + "/" + String.valueOf(total_size));
+            IJ.showProgress(i, total_size);
+
+            if (i + window < end && i + window > loaded_range[1]){
+                //Populate array
+                int max_that_can_fit = min(loaded_range[1] + 1 + slices_that_fit, end);
+                for(int slice_no = loaded_range[1] + 1; slice_no <= max_that_can_fit; slice_no++){
+                    if(slice_no > slice_intervals.get(stack_index)){
+                        prev_stack_sizes += stack.size();
+                        stack_index++;
+                        stack = vstacks.get(stack_index);
+                    }
+                    short[] pixels = (short[])stack.getPixels(slice_no - prev_stack_sizes);
+
+                    for (int j=0; j<dimension; j++){
+                        v_pixels[j][offset] = pixels[j];
+                    }
+                    offset++;
+                }
+                loaded_range[0] = loaded_range[1] + 1;
+                loaded_range[1] = max_that_can_fit;
+            }
+
+            if(!final_images) final_images = (i + window/2 - 1 > end);
             
-            if (!final_images && loaded_range[0] == 1 && i <= window / 2){ //start of images, so any median for the first window frames wont change
-                if(i == 1){
+            if (!final_images && i <= window / 2){ //start of images, so any median for the first window frames wont change
+                if(i == start){
                     for (int j=0; j<dimension; j++){                    
-                        medians[j] = (short)MiscFunctions.getMedian(Arrays.copyOfRange(v_pixels[j], 0, window));                    
-                        //System.out.println(Arrays.toString(Arrays.copyOfRange(v_pixels[j], 0, window)));
-                        //System.out.println(medians[j]);
+                        medians[j] = (short)MiscFunctions.getMedian(Arrays.copyOfRange(v_pixels[j], 0, window));
                     }
                 }
-                
-                for (int j=0; j<dimension; j++){  
-                    newval = (short)(v_pixels[j][i-1] - medians[j]);
-                    new_pixels[j] = newval < 0 ? 0 : newval;
-                    //new_pixels[j] = v_pixels[j][i-1];
+            } else if(final_images) { //end of images, so any median for the last window frames wont change
+                if(!final_median_created){
+                    for (int j=0; j<dimension; j++){
+                        medians[j] = (short)MiscFunctions.getMedian(Arrays.copyOfRange(v_pixels[j], v_pixels[j].length - window, v_pixels[j].length ));
+                    }
+                    final_median_created = true;
                 }
-                
-
-                new_pixels = new_pixels.clone();
-              
- 
-                String save_path = target_dir + "\\slice" + Integer.toString(i) + ".tif";
-                
-                if(!saveShortPixels(save_path, new_pixels, cm)){
-                    IJ.error("Failed to write to:" + save_path);
-                    System.exit(0);
-                }
-                final_stack.addSlice("slice" + Integer.toString(i) + ".tif");
-                System.gc();
-  
-            } else if (final_images ) { //end of images, so any median for the last window frames wont change
-            
             } else {
-                
+                for (int j=0; j<dimension; j++){
+                    medians[j] = (short)MiscFunctions.getMedian(Arrays.copyOfRange(v_pixels[j], i -  window/2 - loaded_range[0], i + window/2 - loaded_range[0]));
+                }
             }
+
+
+            for (int j=0; j<dimension; j++){
+                newval = (short)(v_pixels[j][i-1] - medians[j]);
+                new_pixels[j] = newval < 0 ? 0 : newval;
+            }
+
+            new_pixels = new_pixels.clone();
+
+            String save_path = target_dir + "\\slice" + Integer.toString(i) + ".tif";
+
+            if(!saveShortPixels(save_path, new_pixels, cm)){
+                IJ.error("Failed to write to:" + save_path);
+                System.exit(0);
+            }
+            final_stack.addSlice("slice" + Integer.toString(i) + ".tif");
+
+            //testing.addSlice("", new_pixels);
+            System.gc();
         }
         new ImagePlus("test", final_stack).show(); //Displaying the final stack
+        //new ImagePlus("test_2", testing).show(); //Displaying the final stack
 
         long stopTime = (System.nanoTime()- startTime);
         System.out.println("Script took " + String.format("%.3f", (double)stopTime/1000000000) + " s");
+        //7.6 s for old on smaller comparison
+        //485.403 s for new on smaller comparison
     }
 
 
