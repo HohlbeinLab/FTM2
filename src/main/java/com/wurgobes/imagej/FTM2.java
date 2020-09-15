@@ -280,7 +280,7 @@ public class FTM2 implements ExtendedPlugInFilter {
         //slices_that_fit = 1000;
 
 
-        short[][] v_pixels = new short[slices_that_fit][dimension];
+
         short[] medians = new short[dimension];
         short[] temp = new short[window];
 
@@ -296,35 +296,25 @@ public class FTM2 implements ExtendedPlugInFilter {
         long initialisationTime = System.nanoTime() - startTime;
         long loopstart = System.nanoTime();
 
+        short[][] test_pixels = new short[window][dimension];
+
+        for(int i = 0; i < window; i++){
+            System.arraycopy((short[])stack.getPixels(start + i), 0, test_pixels[i], 0, dimension);
+        }
 
         for(int i = start; i <= end; i++){
-            markedTime = System.nanoTime();
+
             IJ.showStatus("Frame " + String.valueOf(i) + "/" + String.valueOf(total_size));
             IJ.showProgress(i, total_size);
 
-            if (i + window < end  && i + window > loaded_range[1]){
-                int offset = 0;
-                //Populate array
-
-                int start_loop = max(loaded_range[1] - 2 * window + 1, start);
-                int end_loop = min(start_loop + slices_that_fit - 1, end);
-
-                for(int slice_no = start_loop; slice_no <= end_loop ; slice_no++){
-                    if(slice_no > slice_intervals.get(stack_index)){
-                        prev_stack_sizes += stack.size();
-                        stack_index++;
-                        stack = vstacks.get(stack_index);
-                    }
-
-                    System.arraycopy((short[])stack.getPixels(slice_no - prev_stack_sizes), 0, v_pixels[offset], 0, dimension);
-                    offset++;
-
-                }
-                loaded_range[0] = start_loop;
-                loaded_range[1] = end_loop;
-                System.out.println("Loaded from slice " +  Integer.toString(loaded_range[0]) + " till slice " + Integer.toString(loaded_range[1]) + " at slice " + Integer.toString(i));
+            if(i > slice_intervals.get(stack_index)){
+                prev_stack_sizes += stack.size();
+                stack_index++;
+                stack = vstacks.get(stack_index);
             }
-            loadingTime += System.nanoTime() - markedTime;
+
+            System.arraycopy((short[])stack.getPixels(i - prev_stack_sizes), 0, test_pixels[i%50], 0, dimension);
+
 
 
             markedTime = System.nanoTime();
@@ -336,7 +326,7 @@ public class FTM2 implements ExtendedPlugInFilter {
                 if(i == start){
                     for (int j=0; j<dimension; j++){
                         for(int x = 0; x < window; x++){
-                            temp[x] = v_pixels[x][j];
+                            temp[x] = test_pixels[x][j];
                         }
                         medians[j] = (short)MiscFunctions.getMedian(temp);
                     }
@@ -345,7 +335,7 @@ public class FTM2 implements ExtendedPlugInFilter {
                 if(!final_median_created){
                     for (int j=0; j<dimension; j++){
                         for(int x = 0; x < window; x++){
-                            temp[x] = v_pixels[v_pixels.length -  window + x][j];
+                            temp[x] = test_pixels[x][j];
                         }
                         medians[j] = (short)MiscFunctions.getMedian(temp);
                     }
@@ -353,21 +343,21 @@ public class FTM2 implements ExtendedPlugInFilter {
                 }
             } else {
                 for (int j=0; j<dimension; j++){
-
                     for(int x = 0; x < window; x++) {
-                        temp[x] = v_pixels[i - loaded_range[0] - window / 2 + x][j];
+                        temp[x] = test_pixels[x][j];
                     }
                     medians[j] = (short)MiscFunctions.getMedian(temp);
                 }
             }
-            
+
+
             medianTime += System.nanoTime() - markedTime;
 
             markedTime = System.nanoTime();
 
 
             for (int j=0; j<dimension; j++){
-                newval = (short)(v_pixels[i - loaded_range[0]][j] - medians[j]);
+                newval = (short) (test_pixels[i%50][j] - medians[j]);
                 new_pixels[j] = newval < 0 ? 0 : newval;
             }
 
@@ -410,9 +400,13 @@ public class FTM2 implements ExtendedPlugInFilter {
         System.out.println(String.format("%.3f", (double)(stopTime-initialisationTime-loopend)/1000000000) + " s unnacounted for (" + String.format("%.2f", 100*(double)(stopTime-loopend)/stopTime) + "% of total)");
         //7.6 s for old on smaller comparison
         //110 s for new on smaller comparison
-        //110 s for smaller memory mode
+        //108 s for smaller memory mode
         //no med large buffer 6s
         //no med small buffer 5s
+
+        // buffer 400 frames: 0.6s
+        // no buffer 400 frames: 2s
+        // pixel buffer size seems to reallllllly not matter
     }
 
     public void otherRun(){
