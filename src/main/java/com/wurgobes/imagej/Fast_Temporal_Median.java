@@ -244,9 +244,7 @@ public class Fast_Temporal_Median implements PlugInFilter
 					if (pixels[j] < 0)
 						pixels[j] = 0;
 				}
-				//ip.setPixels(pixels);
-				//stack.addSlice("",pixels);
-				//stack.deleteSlice(k);
+
 				sub.addSlice("",pixels); //Add the frame to the stack
 
 				if ((k%1000) == 0)

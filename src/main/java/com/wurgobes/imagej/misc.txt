@@ -34,3 +34,30 @@ String getNonHeap() {
         System.out.println(ObjectSizeCalculator.getObjectSize(vstacks.get(1)));
         System.out.println(ObjectSizeCalculator.getObjectSize(stack));
         System.out.println((ObjectSizeCalculator.getObjectSize(stack.getPixels(1)) + 16 )* stack.getSize() * vstacks.size()); 
+if (!final_images && i <= window / 2){ //start of images, so any median for the first window frames wont change
+                if(i == start){
+                    for (int j=0; j<dimension; j++){
+                        for(int x = 0; x < window; x++){
+                            temp[x] = test_pixels[x][j];
+                        }
+                        medians[j] = (short)MiscFunctions.getMedian(temp);
+                    }
+                }
+            } else if(final_images) { //end of images, so any median for the last window frames wont change
+                if(!final_median_created){
+                    for (int j=0; j<dimension; j++){
+                        for(int x = 0; x < window; x++){
+                            temp[x] = test_pixels[x][j];
+                        }
+                        medians[j] = (short)MiscFunctions.getMedian(temp);
+                    }
+                    final_median_created = true;
+                }
+            } else {
+                for (int j=0; j<dimension; j++){
+                    for(int x = 0; x < window; x++) {
+                        temp[x] = test_pixels[x][j];
+                    }
+                    medians[j] = (short)MiscFunctions.getMedian(temp);
+                }
+            }
