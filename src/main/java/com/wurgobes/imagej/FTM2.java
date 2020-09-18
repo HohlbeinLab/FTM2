@@ -32,6 +32,11 @@ import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
 import static java.lang.Math.*;
 
+class MutableInt {
+    int value = 1; // note that we start at 1 since we're counting
+    public void increment () { ++value;      }
+    public int  get ()       { return value; }
+}
 
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //public class FTM2 implements ExtendedPlugInFilter {
@@ -172,7 +177,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             for(File file: listOfFiles){
                 total_disk_size += file.length();
             }
-            if(false && all_fits){ //All data can fit into memory at once
+            if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
                 vstacks.add(new FolderOpener().openFolder(source_dir).getStack());
                 int current_stack_size = vstacks.get(0).size();
@@ -195,7 +200,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 }
             }
         } else {
-            assert imp != null;
+            imp = WindowManager.getCurrentImage();
             vstacks.add(imp.getStack());
             int current_stack_size = vstacks.get(0).size();
             slice_intervals.add(current_stack_size + total_size);
@@ -237,21 +242,17 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
     @Override
     public void run(){
-        /*
+
         ImagePlus openImage = WindowManager.getCurrentImage();
         if (openImage == null){
             System.out.println("found no image");
-            pre_loaded_image = false;
             setup("", null);
             run(null);
         } else {
-            pre_loaded_image = true;
             System.out.println("found image");
             setup("", openImage);
             run(openImage.getProcessor());
         }
-         */
-
         //OtherRun();
     }
 
@@ -262,7 +263,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         
         
         /*
-        tenet is to acces each slice as few times as possible
+        tenet is to access each slice as few times as possible
         
         get available memory
         load half as many slices as fit (x by y times n) (the other half will be taken up by the reordered arrays)
@@ -296,11 +297,10 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         
 
         short[] new_pixels = new short[dimension];
-
-
-
         short[] medians = new short[dimension];
 
+
+        //List<HashMap<Integer, MutableInt>> hist = new ArrayList<HashMap<Integer, MutableInt>>();
 
         int stack_index;
         for(stack_index = 0; vstacks.get(stack_index).size() < start; stack_index++) ;
@@ -326,12 +326,25 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             test_pixels[i] = (short[]) stack.getPixels(start + i);
         }
         for (int j = 0; j < dimension; j++) {
+
+            //hist.add(new HashMap<Integer, MutableInt>());
+
             for (int x = 0; x < window; x++) {
                 temp[x] = test_pixels[x][j];
+                /*
+                MutableInt count = hist.get(j).get((int) test_pixels[x][j]);
+                if (count == null) {
+                    hist.get(j).put((int) test_pixels[x][j], new MutableInt());
+                }
+                else {
+                    count.increment();
+                }
+                 */
+
             }
             medians[j] = (short) MiscFunctions.getMedian(temp);
         }
-
+        //System.out.println(ObjectSizeCalculator.getObjectSize(hist));
         for(int i = start; i <= end; i++){
 
             IJ.showStatus("Frame " + i+ "/" + total_size);
@@ -343,8 +356,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 stack = vstacks.get(stack_index);
             }
 
-            test_pixels[50] = test_pixels[frame_offset%50]; //these pixels will get overwritten
-            test_pixels[frame_offset%50] = (short[])stack.getPixels(i - prev_stack_sizes);
+            test_pixels[window] = test_pixels[frame_offset%window]; //these pixels will get overwritten
+            test_pixels[frame_offset%window] = (short[])stack.getPixels(i - prev_stack_sizes);
             frame_offset++; // This always needs to start at 0 and increase; start will start at 1
 
             markedTime = System.nanoTime();
@@ -356,8 +369,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 for (int ithread = 0; ithread < threads.length; ithread++) {
                     threads[ithread] = new Thread(() -> {
                         for (int k = ai.getAndIncrement(); k < dimension; k = ai.getAndIncrement()) {
-                            short old_val = test_pixels[50][k];
-                            short new_val = test_pixels[k % 50][k];
+                            short old_val = test_pixels[window][k];
+                            short new_val = test_pixels[k % window][k];
                             short current_median = medians[k];
                             if (!(old_val == new_val | (old_val > current_median && new_val > current_median) | (old_val < current_median && new_val < current_median))) {
                                 short[] temp_2 = new short[window];
@@ -379,7 +392,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
 
             for (int j=0; j<dimension; j++){
-                newval = (short) (test_pixels[frame_offset%50][j] - medians[j]);
+                newval = (short) (test_pixels[frame_offset%window][j] - medians[j]);
                 new_pixels[j] = newval < 0 ? 0 : newval;
             }
 
