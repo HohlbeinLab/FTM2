@@ -48,9 +48,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     public static int end = 0;
 
     //@Parameter
-    private String source_dir;
-
-    //@Parameter
     private String target_dir;
 
     //@Parameter
@@ -66,10 +63,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     
     private int slice_height;
     private int slice_width;
-    
-    private int slice_size;
 
-    private boolean pre_loaded_image = false;
+    private int slice_size;
 
     private boolean all_fits = false;
 
@@ -78,8 +73,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private final long max_bytes = Runtime.getRuntime().maxMemory();
 
     private int bit_depth;
-
-    private final int ratio = 3;
 
     private final int n_cpus = Runtime.getRuntime().availableProcessors();
 
@@ -107,7 +100,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         //Hyperstack support?
         //NOTE that the final implementation probably wont have the entire stack loaded into memory as a Imagestack, at most as a virtualstack
 
-        pre_loaded_image = imp != null;
+        boolean pre_loaded_image = imp != null;
 
         GenericDialogPlus gd = new GenericDialogPlus("Register Virtual Stack");
 
@@ -132,7 +125,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         pre_loaded_image = gd.getNextBoolean();
 
 
-        source_dir = sourceDirectory;
+        //@Parameter
+        String source_dir = sourceDirectory;
         target_dir = outputDirectory;
 
 
@@ -168,7 +162,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             }
         }
 
-        all_fits = total_disk_size < max_bytes/ratio;
+        int ratio = 3;
+        all_fits = total_disk_size < max_bytes/ ratio;
         if(!pre_loaded_image){
             File[] listOfFiles = new File(source_dir).listFiles();
             assert listOfFiles != null;
@@ -177,13 +172,13 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             for(File file: listOfFiles){
                 total_disk_size += file.length();
             }
-            if(all_fits){ //All data can fit into memory at once
+            if(false && all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
                 vstacks.add(new FolderOpener().openFolder(source_dir).getStack());
                 int current_stack_size = vstacks.get(0).size();
                 slice_intervals.add(current_stack_size + total_size);
                 total_size += current_stack_size;
-                System.out.println(source_dir + " with " + Integer.toString(current_stack_size) + " slices with size " + Long.toString(total_disk_size) + " as normal stack");
+                System.out.println(source_dir + " with " + current_stack_size + " slices with size " + total_disk_size + " as normal stack");
             } else {
                 IJ.showStatus("Creating Virtualstack(s)");
                 int Stack_no = 0;
@@ -195,7 +190,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                         slice_intervals.add(current_stack_size + total_size);
                         total_size += current_stack_size;
                         Stack_no++;
-                        System.out.println(Integer.toString(i) + ", " + listOfFiles[i].getPath() + ", " + Integer.toString(current_stack_size) + " slices as virtual stack");
+                        System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + current_stack_size + " slices as virtual stack");
                     }
                 }
             }
@@ -205,7 +200,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             int current_stack_size = vstacks.get(0).size();
             slice_intervals.add(current_stack_size + total_size);
             total_size += current_stack_size;
-            System.out.println(imp.getTitle() + " with " + Integer.toString(current_stack_size) + " slices with size " + Long.toString(total_disk_size) + " as normal stack");
+            System.out.println(imp.getTitle() + " with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
         }
 
 
@@ -229,8 +224,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
 
         slice_size = dimension * bit_depth * 8; //bytes per slice
-        
-        
+
+
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
         
@@ -313,7 +308,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         ImageStack stack = vstacks.get(stack_index);
 
         int prev_stack_sizes = 0;
-        short newval = 0;
+        short newval;
         int frame_offset = 0;
         int start_window = start + window / 2;
         int end_window = end - window / 2;
@@ -328,7 +323,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         //byte[][] hist = new byte[dimension][(int)pow(2, bit_depth)]; // gives out of heap space error with file ~700 MB because it wants to allocate 16GB
 
         for(int i = 0; i < window; i++){
-            System.arraycopy((short[])stack.getPixels(start + i), 0, test_pixels[i], 0, dimension);
+            test_pixels[i] = (short[]) stack.getPixels(start + i);
         }
         for (int j = 0; j < dimension; j++) {
             for (int x = 0; x < window; x++) {
@@ -339,7 +334,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         for(int i = start; i <= end; i++){
 
-            IJ.showStatus("Frame " + String.valueOf(i) + "/" + String.valueOf(total_size));
+            IJ.showStatus("Frame " + i+ "/" + total_size);
             IJ.showProgress(i, total_size);
 
             if(i > slice_intervals.get(stack_index)){
@@ -361,11 +356,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 for (int ithread = 0; ithread < threads.length; ithread++) {
                     threads[ithread] = new Thread(() -> {
                         for (int k = ai.getAndIncrement(); k < dimension; k = ai.getAndIncrement()) {
-                            short[] temp_2 = new short[window];
                             short old_val = test_pixels[50][k];
                             short new_val = test_pixels[k % 50][k];
                             short current_median = medians[k];
-                            if (old_val != new_val | (old_val > current_median && new_val < current_median) | (old_val < current_median && new_val > current_median)) {
+                            if (!(old_val == new_val | (old_val > current_median && new_val > current_median) | (old_val < current_median && new_val < current_median))) {
+                                short[] temp_2 = new short[window];
                                 for (int x = 0; x < window; x++) {
                                     temp_2[x] = test_pixels[x][k];
                                 }
@@ -393,14 +388,14 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
             markedTime = System.nanoTime();
             if(!all_fits){
-                String save_path = target_dir + "\\slice" + Integer.toString(i) + ".tif";
+                String save_path = target_dir + "\\slice" + i + ".tif";
                 if(!saveShortPixels(save_path, new_pixels, cm)){
                     IJ.error("Failed to write to:" + save_path);
                     System.exit(0);
                 }
-                final_virtual_stack.addSlice("slice" + Integer.toString(i) + ".tif");
+                final_virtual_stack.addSlice("slice" + i + ".tif");
             } else {
-                final_normal_stack.addSlice("slice" + Integer.toString(i), new_pixels);
+                final_normal_stack.addSlice("slice" + i, new_pixels);
             }
 
 
@@ -443,16 +438,16 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         // 18/09
         // implemented multithreading and different median
-        // 76s on 1.5k large frame virtual 4929.1  kpxs
-        // 40s on 20k virtual comparison 2001.8 kpxs
-        // 1.145s on 400 virtual comparison 1396.8 kpxs
-        // 8538s on 1.5k large frame normal 4147.0 kpxs
-        // 31.2s on 20k normal comparison 2562.9 kpxs
-        // 0.838s on 400 normal comparison 1909.0 kpxs
+        // 47s on 1.5k large frame virtual 7979.5  kpxs
+        // 33.2s on 20k virtual comparison 2410.1 kpxs
+        // 0.95s on 400 virtual comparison 1686.7 kpxs
+        // 50s on 1.5k large frame normal 7495.4 kpxs
+        // 26.8s on 20k normal comparison 2987.2 kpxs
+        // 0.6s on 400 normal comparison 2384.9 kpxs
     }
 
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
 
         final ImageJ IJ_Instance = new ImageJ();
         //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
