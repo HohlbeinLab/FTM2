@@ -299,9 +299,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         short[] new_pixels = new short[dimension];
         short[] medians = new short[dimension];
 
-
-        //List<HashMap<Integer, MutableInt>> hist = new ArrayList<HashMap<Integer, MutableInt>>();
-
         int stack_index;
         for(stack_index = 0; vstacks.get(stack_index).size() < start; stack_index++) ;
 
@@ -320,31 +317,18 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         short[][] test_pixels = new short[window + 1][dimension];
         short[] temp = new short[window];
 
-        //byte[][] hist = new byte[dimension][(int)pow(2, bit_depth)]; // gives out of heap space error with file ~700 MB because it wants to allocate 16GB
 
         for(int i = 0; i < window; i++){
             test_pixels[i] = (short[]) stack.getPixels(start + i);
         }
         for (int j = 0; j < dimension; j++) {
-
-            //hist.add(new HashMap<Integer, MutableInt>());
-
             for (int x = 0; x < window; x++) {
                 temp[x] = test_pixels[x][j];
-                /*
-                MutableInt count = hist.get(j).get((int) test_pixels[x][j]);
-                if (count == null) {
-                    hist.get(j).put((int) test_pixels[x][j], new MutableInt());
-                }
-                else {
-                    count.increment();
-                }
-                 */
 
             }
             medians[j] = (short) MiscFunctions.getMedian(temp);
         }
-        //System.out.println(ObjectSizeCalculator.getObjectSize(hist));
+
         for(int i = start; i <= end; i++){
 
             IJ.showStatus("Frame " + i+ "/" + total_size);
