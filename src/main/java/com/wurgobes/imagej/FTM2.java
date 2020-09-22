@@ -9,8 +9,9 @@ import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.*;
 import ij.io.FileSaver;
 import ij.WindowManager;
-import ij.util.ThreadUtil;
 
+
+import net.haesleinhuepf.clij.coremem.enums.NativeTypeEnum;
 import org.scijava.plugin.*;
 import org.scijava.Priority;
 import org.scijava.command.Command;
@@ -26,17 +27,9 @@ import com.wurgobes.imagej.MiscFunctions;
 import java.io.File;
 import java.util.*; 
 import java.awt.image.ColorModel;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
-import static java.lang.Math.*;
-
-class MutableInt {
-    int value = 1; // note that we start at 1 since we're counting
-    public void increment () { ++value;      }
-    public int  get ()       { return value; }
-}
 
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //public class FTM2 implements ExtendedPlugInFilter {
@@ -69,7 +62,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private int slice_height;
     private int slice_width;
 
-    private int slice_size;
 
     private boolean all_fits = false;
 
@@ -78,24 +70,18 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private final long max_bytes = Runtime.getRuntime().maxMemory();
 
     private int bit_depth;
+    private String bit_size_string;
 
-    private final int n_cpus = Runtime.getRuntime().availableProcessors();
-
-    public long getFreeMemory(boolean am_i_the_garbage_man){
-        if (am_i_the_garbage_man){
-            System.gc();
-        }
-        return Runtime.getRuntime().freeMemory();
-    }
     
-    public boolean saveShortPixels(final String path, short[] pixels, ColorModel cm){
-        ImagePlus tmp = new ImagePlus("", new ShortProcessor(slice_width, slice_height, pixels, cm).duplicate());
+    public boolean saveShortPixels(final String path, ImageProcessor impP){
+        ImagePlus tmp = new ImagePlus("", impP);
         try {
                 return new FileSaver(tmp).saveAsTiff(path);
         } catch (Exception e) {
                 return false;
         }
     }
+
 
     @Override
     public int setup(String arg, ImagePlus imp) {
@@ -169,6 +155,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         int ratio = 3;
         all_fits = total_disk_size < max_bytes/ ratio;
+        //all_fits = false;
         if(!pre_loaded_image){
             File[] listOfFiles = new File(source_dir).listFiles();
             assert listOfFiles != null;
@@ -220,15 +207,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         dimension = slice_width * slice_height; //Amount of pixels per image
         bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
 
-        if (bit_depth == 0) bit_depth = 16;
-        else if (bit_depth <= 8) bit_depth = 8;
-        else if (bit_depth <= 16) bit_depth = 16;
-        else if (bit_depth <= 32) bit_depth = 32;
+        if (bit_depth == 0) {bit_depth = 16; bit_size_string = "Short";}
+        else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "Byte";}
+        else if (bit_depth <= 16) {bit_depth = 16; bit_size_string = "Short";}
+        else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Int";}
         else IJ.error("this is very wrong");
-
-
-
-        slice_size = dimension * bit_depth * 8; //bytes per slice
 
 
         if(end == 0) end = total_size;
@@ -286,136 +269,150 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         long medianTime = 0;
         long loadingTime = 0;
         long applicationTime = 0;
+
         long markedTime;
-        
-        ColorModel cm = vstacks.get(0).getColorModel();
+
 
         final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
-        final ImageStack final_normal_stack = new ImageStack(slice_width, slice_height);
-
         final_virtual_stack.setBitDepth(bit_depth);
-        
 
-        short[] new_pixels = new short[dimension];
-        short[] medians = new short[dimension];
 
-        int stack_index;
-        for(stack_index = 0; vstacks.get(stack_index).size() < start; stack_index++) ;
-
-        ImageStack stack = vstacks.get(stack_index);
-
-        int prev_stack_sizes = 0;
-        short newval;
-        int frame_offset = 0;
         int start_window = start + window / 2;
         int end_window = end - window / 2;
-        int redoes = 0;
 
-        long initialisationTime = System.nanoTime() - startTime;
+        int s, e;
+        int stack_index;
+        int prev_stack_sizes = 0;
+
+        ColorModel cm = vstacks.get(0).getColorModel();
+
+        for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
+        ImageStack stack = vstacks.get(stack_index);
+
+
+
         long loopstart = System.nanoTime();
 
-        short[][] test_pixels = new short[window + 1][dimension];
-        short[] temp = new short[window];
+        int frameoffset = 0;
 
 
-        for(int i = 0; i < window; i++){
-            test_pixels[i] = (short[]) stack.getPixels(start + i);
-        }
-        for (int j = 0; j < dimension; j++) {
-            for (int x = 0; x < window; x++) {
-                temp[x] = test_pixels[x][j];
+        CLIJ2 clij2 = CLIJ2.getInstance();
 
+        ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
+        ClearCLBuffer output = clij2.create(temp);
+        ClearCLBuffer output_stack = clij2.create(new long[]{slice_width, slice_height, total_size}, NativeTypeEnum.valueOf(bit_size_string));
+
+
+        ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
+        for(int k = start; k <= start + window; k++) {
+            if (k > slice_intervals.get(stack_index)) {
+                prev_stack_sizes += stack.size();
+                stack_index++;
+                stack = vstacks.get(stack_index);
             }
-            medians[j] = (short) MiscFunctions.getMedian(temp);
+            temp_stack.addSlice("", new ShortProcessor(slice_width, slice_height, (short[]) stack.getPixels(k - prev_stack_sizes), cm).duplicate());
         }
+        ImagePlus temp_image = new ImagePlus("temp", temp_stack);
 
-        for(int i = start; i <= end; i++){
+
+
+        for(int i = start; i <= end; i++, frameoffset++){
 
             IJ.showStatus("Frame " + i+ "/" + total_size);
             IJ.showProgress(i, total_size);
 
-            if(i > slice_intervals.get(stack_index)){
+            markedTime = System.nanoTime();
+
+            if(i >= start_window && i <= end_window) {
+                s = i - window/2;
+                e = i + window/2;
+            } else if (i < start_window){
+                s = 1;
+                e = window;
+            } else {
+                s = end - window;
+                e = end;
+            }
+
+          if(e > slice_intervals.get(stack_index)){
                 prev_stack_sizes += stack.size();
                 stack_index++;
                 stack = vstacks.get(stack_index);
             }
 
-            test_pixels[window] = test_pixels[frame_offset%window]; //these pixels will get overwritten
-            test_pixels[frame_offset%window] = (short[])stack.getPixels(i - prev_stack_sizes);
-            frame_offset++; // This always needs to start at 0 and increase; start will start at 1
+            ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_image.getStack().getProcessor((i - 1) % window + 1)));
 
+            if(i == start) {
+                ClearCLBuffer input = clij2.push(temp_image);
+                clij2.medianZProjection(input, temp);
+            } else if(i >= start_window && i <= end_window) {
+                temp_stack.setProcessor(stack.getProcessor(e - prev_stack_sizes), ((s - 1) % window + 1));
+
+                temp_image.setStack(temp_stack);
+
+                ClearCLBuffer input = clij2.push(temp_image);
+                clij2.medianZProjection(input, temp);
+
+                input.close();
+            }
+
+            loadingTime += System.nanoTime() - markedTime;
             markedTime = System.nanoTime();
 
 
-            if(i > start_window && i < end_window) {
-                final AtomicInteger ai = new AtomicInteger(0);
-                Thread[] threads = ThreadUtil.createThreadArray(n_cpus);
-                for (int ithread = 0; ithread < threads.length; ithread++) {
-                    threads[ithread] = new Thread(() -> {
-                        for (int k = ai.getAndIncrement(); k < dimension; k = ai.getAndIncrement()) {
-                            short old_val = test_pixels[window][k];
-                            short new_val = test_pixels[k % window][k];
-                            short current_median = medians[k];
-                            if (!(old_val == new_val | (old_val > current_median && new_val > current_median) | (old_val < current_median && new_val < current_median))) {
-                                short[] temp_2 = new short[window];
-                                for (int x = 0; x < window; x++) {
-                                    temp_2[x] = test_pixels[x][k];
-                                }
-                                medians[k] = (short) MiscFunctions.getMedian(temp_2);
-                            }
-                        }
-                    });
-                }
-                ThreadUtil.startAndJoin(threads);
-            }
+            clij2.subtractImages(current_frame_CL, temp, output);
 
+            current_frame_CL.close();
 
             medianTime += System.nanoTime() - markedTime;
 
             markedTime = System.nanoTime();
 
-
-            for (int j=0; j<dimension; j++){
-                newval = (short) (test_pixels[frame_offset%window][j] - medians[j]);
-                new_pixels[j] = newval < 0 ? 0 : newval;
-            }
-
-            new_pixels = new_pixels.clone();
-            applicationTime += System.nanoTime() - markedTime;
-
-            markedTime = System.nanoTime();
             if(!all_fits){
+                ImageProcessor result = clij2.pull(output).getProcessor();
                 String save_path = target_dir + "\\slice" + i + ".tif";
-                if(!saveShortPixels(save_path, new_pixels, cm)){
+                if(!saveShortPixels(save_path, result)){
                     IJ.error("Failed to write to:" + save_path);
                     System.exit(0);
                 }
                 final_virtual_stack.addSlice("slice" + i + ".tif");
             } else {
-                final_normal_stack.addSlice("slice" + i, new_pixels);
+                clij2.copySlice(output, output_stack, frameoffset);
             }
 
+
+            //output.close();
 
             if (i%1000 == 0) System.gc();
             savingTime = System.nanoTime() - markedTime;
 
         }
+        ImagePlus test = clij2.pull(output_stack);
+        test.setTitle("normal");
+
+        output_stack.close();
+        temp.close();
+        output.close();
+        clij2.clear();
+
+
         long loopend = System.nanoTime() - loopstart;
         long stopTime = System.nanoTime() - startTime;
         if(!all_fits){
             new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
         } else {
-            new ImagePlus("normal", final_normal_stack).show(); //Displaying the final stack
+            //new ImagePlus("normal", final_normal_stack).show(); //Displaying the final stack
+            test.show();
         }
+
+        IJ.run("Enhance Contrast", "saturated=0.0");
+
 
         double spendTime = (double)stopTime/1000000000;
         System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
-        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(dimension/1000)*((double)(end - start + 1)/spendTime))+ " kpxs");
-        System.out.println("Recalculated " + redoes + " pixels");
-        System.out.println("Initialisation took " + String.format("%.3f", (double)initialisationTime/1000000000) + " s (" + String.format("%.2f",100* (double)initialisationTime/stopTime) + "% of total)");
-        System.out.println("Loading took " + String.format("%.3f", (double)loadingTime/1000000000) + " s (" + String.format("%.2f",100* (double)loadingTime/stopTime) + "% of total)");
-        System.out.println("Median took " + String.format("%.3f", (double)medianTime/1000000000) + " s (" + String.format("%.2f",100* (double)medianTime/stopTime) + "% of total)");
-        System.out.println("Loading took " + String.format("%.3f", (double)applicationTime/1000000000) + " s (" + String.format("%.2f",100* (double)applicationTime/stopTime) + "% of total)");
+        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1000*1000)/spendTime))+ " MB/s");
+        System.out.println("GPU took " + String.format("%.3f", (double)loadingTime/1000000000) + " s (" + String.format("%.2f",100* (double)loadingTime/stopTime) + "% of total)");
+        System.out.println("GPU took " + String.format("%.3f", (double)medianTime/1000000000) + " s (" + String.format("%.2f",100* (double)medianTime/stopTime) + "% of total)");
         System.out.println("Saving and garbage day took " + String.format("%.3f", (double)savingTime/1000000000) + " s (" + String.format("%.2f", 100*(double)savingTime/stopTime) + "% of total)");
         System.out.println("Extra Loop Stuff took " + String.format("%.3f", (double)(loopend-savingTime-applicationTime-medianTime-loadingTime)/1000000000) + " s (" + String.format("%.2f", 100*(double)(loopend-savingTime-applicationTime-medianTime-loadingTime)/stopTime) + "% of total)");
 
@@ -425,14 +422,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         // 20k stack normal: 3.18s
         // 20k stack virtual 56s
 
-        // 17/09
-        // 631s on 1.5k large frame virtual 602.9 kpxs
-        // 160s on 20k virtual comparison 511.25 kpxs
-        // 3.2s on 400 virtual comparison 522.9 kpxs
-        // 729s on 1.5k large frame normal 524.9 kpxs
-        // 120s on 20k normal comparison 684.0 kpxs (sanity check 120s 671.7 kpxs fps with larger buffer)
-        // 2.2s on 400 normal comparison 737 kpxs
-
         // 18/09
         // implemented multithreading and different median
         // 47s on 1.5k large frame virtual 7979.5  kpxs
@@ -441,6 +430,21 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         // 50s on 1.5k large frame normal 7495.4 kpxs
         // 26.8s on 20k normal comparison 2987.2 kpxs
         // 0.6s on 400 normal comparison 2384.9 kpxs
+
+        // 21/09
+        // initial gpu implementation with builtins
+        // 37.645s on 1.5k large frame normal 9952.4 kpxs
+        // 18.715s on 20k normal comparison 4273.7 kpxs
+        // 1.175s on 400 normal comparison  1361.7  kpxs
+
+        // 22/09
+        // slightly different gpu implementation for smaller stacks
+        // 45.824s on 1.5k large frame virtual 17.0 MB/s
+        // 48.023s on 20k virtual comparison 3.5 MB/s
+        // 1.76s on 400 virtual comparison 1.7  MB/s
+        // 33.780 on 1.5k large frame normal 23.1 MB/s
+        // 18.091s on 20k normal comparison 9.2 MB/s
+        // 1.779s on 400 normal comparison  1.7 MB/s
     }
 
 
