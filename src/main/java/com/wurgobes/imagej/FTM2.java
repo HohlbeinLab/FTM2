@@ -283,6 +283,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         int s, e;
         int stack_index;
         int prev_stack_sizes = 0;
+        int frameoffset = 0;
 
         ColorModel cm = vstacks.get(0).getColorModel();
 
@@ -293,7 +294,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         long loopstart = System.nanoTime();
 
-        int frameoffset = 0;
+
 
 
         CLIJ2 clij2 = CLIJ2.getInstance();
@@ -316,25 +317,14 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
 
 
-        for(int i = start; i <= end; i++, frameoffset++){
+        for(int i = start; i <= end; i++){
 
             IJ.showStatus("Frame " + i+ "/" + total_size);
             IJ.showProgress(i, total_size);
 
             markedTime = System.nanoTime();
 
-            if(i >= start_window && i <= end_window) {
-                s = i - window/2;
-                e = i + window/2;
-            } else if (i < start_window){
-                s = 1;
-                e = window;
-            } else {
-                s = end - window;
-                e = end;
-            }
-
-          if(e > slice_intervals.get(stack_index)){
+            if(i < end - window && i + window > slice_intervals.get(stack_index)){
                 prev_stack_sizes += stack.size();
                 stack_index++;
                 stack = vstacks.get(stack_index);
@@ -346,8 +336,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 ClearCLBuffer input = clij2.push(temp_image);
                 clij2.medianZProjection(input, temp);
             } else if(i >= start_window && i <= end_window) {
-                temp_stack.setProcessor(stack.getProcessor(e - prev_stack_sizes), ((s - 1) % window + 1));
+                temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes), (frameoffset % window + 1));
 
+                frameoffset++;
                 temp_image.setStack(temp_stack);
 
                 ClearCLBuffer input = clij2.push(temp_image);
@@ -377,11 +368,10 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 }
                 final_virtual_stack.addSlice("slice" + i + ".tif");
             } else {
-                clij2.copySlice(output, output_stack, frameoffset);
+                clij2.copySlice(output, output_stack, i - 1);
             }
 
 
-            //output.close();
 
             if (i%1000 == 0) System.gc();
             savingTime = System.nanoTime() - markedTime;
@@ -440,11 +430,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         // 22/09
         // slightly different gpu implementation for smaller stacks
         // 45.824s on 1.5k large frame virtual 17.0 MB/s
-        // 48.023s on 20k virtual comparison 3.5 MB/s
-        // 1.76s on 400 virtual comparison 1.7  MB/s
+        // 48.023s on 20k virtual 3.5 MB/s
+        // 1.76s on 400 virtual 1.7  MB/s
         // 33.780 on 1.5k large frame normal 23.1 MB/s
-        // 18.091s on 20k normal comparison 9.2 MB/s
-        // 1.779s on 400 normal comparison  1.7 MB/s
+        // 18.091s on 20k normal 9.2 MB/s
+        // 1.193s on 400 normal 2.5 MB/s
     }
 
 
