@@ -73,10 +73,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private String bit_size_string;
 
     
-    public boolean saveShortPixels(final String path, ImageProcessor impP){
-        ImagePlus tmp = new ImagePlus("", impP);
+    public boolean saveImagePlus(final String path, ImagePlus impP){
         try {
-                return new FileSaver(tmp).saveAsTiff(path);
+                return new FileSaver(impP).saveAsTiff(path);
         } catch (Exception e) {
                 return false;
         }
@@ -194,9 +193,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             total_size += current_stack_size;
             System.out.println(imp.getTitle() + " with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
         }
-
-
-
+        
 
         if(total_size <= 1){
             IJ.error("Error: Stack must have size larger than 1.");
@@ -241,29 +238,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
     @Override
     public void run(ImageProcessor ip) {
-        //This will first be getting a initial implementation to ensure it works
-        //If not yet implemented then, it will be ensured files>20GB will work without being loaded into memory
-        
-        
-        /*
-        tenet is to access each slice as few times as possible
-        
-        get available memory
-        load half as many slices as fit (x by y times n) (the other half will be taken up by the reordered arrays)
-        for the entire loaded stack:
-            create vertically sliced arrays (v_pixels) (dimension arrays with n entries)
-        for every n entries:
-            take a i_window of desired size and take the median of v_pixels with that range and subtract that from the entry n (min 0) 
-                this median does not change for the first i_window slices and last i_window slices
-            look ahead and back as equally as possible (so from n-window/2 to n+window/2, with only forward and backward for the start and end respectively)   
-            when the buffered pixels run out, delete all unneeded data and load as much new data as can fit (to minimise memory writes)
-                one can overwrite the no longer needed pixels
-            
-            per n you reconstruct one slice by getting a single pixel per v_pixels array and putting those back
-            
-        */
-        //slice_size + 16 is the size of one frame when gotten with getPixels(n)
-        
         long startTime = System.nanoTime();
         long savingTime = 0;
         long medianTime = 0;
@@ -276,11 +250,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
         final_virtual_stack.setBitDepth(bit_depth);
 
-
         int start_window = start + window / 2;
         int end_window = end - window / 2;
 
-        int s, e;
         int stack_index;
         int prev_stack_sizes = 0;
         int frameoffset = 0;
@@ -291,17 +263,18 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         ImageStack stack = vstacks.get(stack_index);
 
 
-
         long loopstart = System.nanoTime();
-
-
 
 
         CLIJ2 clij2 = CLIJ2.getInstance();
 
         ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
         ClearCLBuffer output = clij2.create(temp);
-        ClearCLBuffer output_stack = clij2.create(new long[]{slice_width, slice_height, total_size}, NativeTypeEnum.valueOf(bit_size_string));
+
+        ClearCLBuffer output_stack = null;
+        if(all_fits) output_stack = clij2.create(new long[]{slice_width, slice_height, total_size}, NativeTypeEnum.valueOf(bit_size_string));
+
+
 
 
         ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
@@ -360,9 +333,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             markedTime = System.nanoTime();
 
             if(!all_fits){
-                ImageProcessor result = clij2.pull(output).getProcessor();
+                ImagePlus result = clij2.pull(output);
                 String save_path = target_dir + "\\slice" + i + ".tif";
-                if(!saveShortPixels(save_path, result)){
+                if(!saveImagePlus(save_path, result)){
                     IJ.error("Failed to write to:" + save_path);
                     System.exit(0);
                 }
@@ -377,10 +350,12 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             savingTime = System.nanoTime() - markedTime;
 
         }
-        ImagePlus test = clij2.pull(output_stack);
-        test.setTitle("normal");
+        ImagePlus final_normal_stack = clij2.pull(output_stack);
+        final_normal_stack.setTitle("normal");
 
-        output_stack.close();
+        if (output_stack != null) output_stack.close();
+
+
         temp.close();
         output.close();
         clij2.clear();
@@ -391,8 +366,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         if(!all_fits){
             new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
         } else {
-            //new ImagePlus("normal", final_normal_stack).show(); //Displaying the final stack
-            test.show();
+            final_normal_stack.show();
         }
 
         IJ.run("Enhance Contrast", "saturated=0.0");
