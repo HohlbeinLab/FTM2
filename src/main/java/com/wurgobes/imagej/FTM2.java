@@ -12,6 +12,20 @@ import ij.WindowManager;
 
 
 import net.haesleinhuepf.clij.coremem.enums.NativeTypeEnum;
+import net.imagej.Dataset;
+import net.imagej.ImgPlus;
+import net.imagej.ops.transform.crop.CropImgPlus;
+import net.imglib2.*;
+import net.imglib2.RandomAccess;
+import net.imglib2.cache.img.CellLoader;
+import net.imglib2.cache.img.DiskCachedCellImgFactory;
+import net.imglib2.cache.img.DiskCachedCellImgOptions;
+import net.imglib2.cache.img.SingleCellArrayImg;
+import net.imglib2.img.Img;
+import net.imglib2.img.VirtualStackAdapter;
+import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.type.Type;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 import org.scijava.plugin.*;
 import org.scijava.Priority;
 import org.scijava.command.Command;
@@ -20,9 +34,18 @@ import net.haesleinhuepf.clij.CLIJ;
 import net.haesleinhuepf.clij.clearcl.ClearCLBuffer;
 import net.haesleinhuepf.clij2.CLIJ2;
 
+import io.scif.img.IO;
+import io.scif.img.ImgIOException;
 
-import com.wurgobes.imagej.MiscFunctions;
-
+import net.imglib2.Cursor;
+import net.imglib2.IterableInterval;
+import net.imglib2.RandomAccessible;
+import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.img.Img;
+import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.type.Type;
+import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.view.Views;
 
 import java.io.File;
 import java.util.*; 
@@ -72,6 +95,10 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private int bit_depth;
     private String bit_size_string;
 
+    private Img<UnsignedShortType> imageData;
+    private Dataset currentData;
+
+
     
     public boolean saveImagePlus(final String path, ImagePlus impP){
         try {
@@ -80,6 +107,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 return false;
         }
     }
+
 
 
     @Override
@@ -152,9 +180,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             }
         }
 
-        int ratio = 3;
-        all_fits = total_disk_size < max_bytes/ ratio;
-        //all_fits = false;
+
+        boolean any_too_big = false;
+
         if(!pre_loaded_image){
             File[] listOfFiles = new File(source_dir).listFiles();
             assert listOfFiles != null;
@@ -162,14 +190,21 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
             for(File file: listOfFiles){
                 total_disk_size += file.length();
+                if (file.length() > max_bytes) {
+                    any_too_big = true;
+                }
             }
+            all_fits = total_disk_size < max_bytes/ 3;
+            //all_fits = false;
             if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
-                vstacks.add(new FolderOpener().openFolder(source_dir).getStack());
-                int current_stack_size = vstacks.get(0).size();
-                slice_intervals.add(current_stack_size + total_size);
+
+                ImagePlus temp_img = new FolderOpener().openFolder(source_dir);
+                imageData = ImageJFunctions.wrapReal(temp_img);
+
+                int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
                 total_size += current_stack_size;
-                System.out.println(source_dir + " with " + current_stack_size + " slices with size " + total_disk_size + " as normal stack");
+                System.out.println("Loaded opened image with " + current_stack_size + " slices with size " + total_disk_size + " as normal stack");
             } else {
                 IJ.showStatus("Creating Virtualstack(s)");
                 int Stack_no = 0;
@@ -183,15 +218,31 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                         Stack_no++;
                         System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + current_stack_size + " slices as virtual stack");
                     }
+                    //RandomAccessibleInterval< UnsignedShortType > start_window = Views.offsetInterval(imageData, new long[] {0, 0, 0}, new long[] {imageData.dimension(0), imageData.dimension(1) , window});
+                    //RandomAccessibleInterval< UnsignedShortType > end_window = Views.offsetInterval(imageData, new long[] {0, 0, current_stack_size - window}, new long[] {imageData.dimension(0), imageData.dimension(1) , current_stack_size});
+
                 }
+
+                slice_height = vstacks.get(0).getHeight();
+                slice_width = vstacks.get(0).getWidth();
+                dimension = slice_width * slice_height; //Amount of pixels per image
+                bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+
+                //ImagePlus temp = new ImagePlus("temp", vstacks.get(0));
+
+
+                //Img<UnsignedShortType> img = VirtualStackAdapter.wrapShort(temp);
+
+
+
+                //ImageJFunctions.show(img);
             }
         } else {
-            imp = WindowManager.getCurrentImage();
-            vstacks.add(imp.getStack());
-            int current_stack_size = vstacks.get(0).size();
-            slice_intervals.add(current_stack_size + total_size);
+            imageData = ImageJFunctions.wrapReal(WindowManager.getCurrentImage());
+
+            int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
             total_size += current_stack_size;
-            System.out.println(imp.getTitle() + " with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
+            System.out.println("Loaded opened image with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
         }
         
 
@@ -199,10 +250,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             IJ.error("Error: Stack must have size larger than 1.");
         }
         
-        slice_height = vstacks.get(0).getHeight();
-        slice_width = vstacks.get(0).getWidth();
-        dimension = slice_width * slice_height; //Amount of pixels per image
-        bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
 
         if (bit_depth == 0) {bit_depth = 16; bit_size_string = "Short";}
         else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "Byte";}
@@ -239,146 +286,114 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     @Override
     public void run(ImageProcessor ip) {
         long startTime = System.nanoTime();
-        long savingTime = 0;
-        long medianTime = 0;
-        long loadingTime = 0;
-        long applicationTime = 0;
-
-        long markedTime;
 
 
-        final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
-        final_virtual_stack.setBitDepth(bit_depth);
+        if(!all_fits) {
+            int start_window = start + window / 2;
+            int end_window = end - window / 2;
 
-        int start_window = start + window / 2;
-        int end_window = end - window / 2;
-
-        int stack_index;
-        int prev_stack_sizes = 0;
-        int frameoffset = 0;
-
-        ColorModel cm = vstacks.get(0).getColorModel();
-
-        for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
-        ImageStack stack = vstacks.get(stack_index);
+            int stack_index;
+            int prev_stack_sizes = 0;
+            int frameoffset = 0;
 
 
-        long loopstart = System.nanoTime();
+            final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
+            final_virtual_stack.setBitDepth(bit_depth);
+            ColorModel cm = vstacks.get(0).getColorModel();
+
+            for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
+            ImageStack stack = vstacks.get(stack_index);
+
+            CLIJ2 clij2 = CLIJ2.getInstance();
+
+            ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
+            ClearCLBuffer output = clij2.create(temp);
 
 
-        CLIJ2 clij2 = CLIJ2.getInstance();
-
-        ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
-        ClearCLBuffer output = clij2.create(temp);
-
-        ClearCLBuffer output_stack = null;
-        if(all_fits) output_stack = clij2.create(new long[]{slice_width, slice_height, total_size}, NativeTypeEnum.valueOf(bit_size_string));
-
-
-
-
-        ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
-        for(int k = start; k <= start + window; k++) {
-            if (k > slice_intervals.get(stack_index)) {
-                prev_stack_sizes += stack.size();
-                stack_index++;
-                stack = vstacks.get(stack_index);
+            ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
+            for(int k = start; k <= start + window; k++) {
+                if (k > slice_intervals.get(stack_index)) {
+                    prev_stack_sizes += stack.size();
+                    stack_index++;
+                    stack = vstacks.get(stack_index);
+                }
+                temp_stack.addSlice("", new ShortProcessor(slice_width, slice_height, (short[]) stack.getPixels(k - prev_stack_sizes), cm).duplicate());
             }
-            temp_stack.addSlice("", new ShortProcessor(slice_width, slice_height, (short[]) stack.getPixels(k - prev_stack_sizes), cm).duplicate());
-        }
-        ImagePlus temp_image = new ImagePlus("temp", temp_stack);
+            ImagePlus temp_image = new ImagePlus("temp", temp_stack);
+
+            for (int i = start; i <= end; i++) {
+
+                IJ.showStatus("Frame " + i + "/" + total_size);
+                IJ.showProgress(i, total_size);
 
 
+                if (i < end - window && i + window / 2 > slice_intervals.get(stack_index)) {
+                    prev_stack_sizes += stack.size();
+                    stack_index++;
+                    stack = vstacks.get(stack_index);
+                }
 
-        for(int i = start; i <= end; i++){
+                ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_stack.getProcessor((i - 1) % window + 1)));
 
-            IJ.showStatus("Frame " + i+ "/" + total_size);
-            IJ.showProgress(i, total_size);
+                if (i == start) {
+                    ClearCLBuffer input = clij2.push(temp_image);
+                    clij2.medianZProjection(input, temp);
+                } else if (i >= start_window && i <= end_window) {
 
-            markedTime = System.nanoTime();
+                    temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes + 1), (frameoffset % window + 1));
 
-            if(i < end - window && i + window > slice_intervals.get(stack_index)){
-                prev_stack_sizes += stack.size();
-                stack_index++;
-                stack = vstacks.get(stack_index);
-            }
+                    frameoffset++;
+                    temp_image.setStack(temp_stack);
 
-            ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_image.getStack().getProcessor((i - 1) % window + 1)));
+                    ClearCLBuffer input = clij2.push(temp_image);
+                    clij2.medianZProjection(input, temp);
 
-            if(i == start) {
-                ClearCLBuffer input = clij2.push(temp_image);
-                clij2.medianZProjection(input, temp);
-            } else if(i >= start_window && i <= end_window) {
-                temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes), (frameoffset % window + 1));
+                    input.close();
+                }
 
-                frameoffset++;
-                temp_image.setStack(temp_stack);
+                clij2.subtractImages(current_frame_CL, temp, output);
 
-                ClearCLBuffer input = clij2.push(temp_image);
-                clij2.medianZProjection(input, temp);
-
-                input.close();
-            }
-
-            loadingTime += System.nanoTime() - markedTime;
-            markedTime = System.nanoTime();
+                current_frame_CL.close();
 
 
-            clij2.subtractImages(current_frame_CL, temp, output);
-
-            current_frame_CL.close();
-
-            medianTime += System.nanoTime() - markedTime;
-
-            markedTime = System.nanoTime();
-
-            if(!all_fits){
                 ImagePlus result = clij2.pull(output);
                 String save_path = target_dir + "\\slice" + i + ".tif";
-                if(!saveImagePlus(save_path, result)){
+                if (!saveImagePlus(save_path, result)) {
                     IJ.error("Failed to write to:" + save_path);
                     System.exit(0);
                 }
                 final_virtual_stack.addSlice("slice" + i + ".tif");
-            } else {
-                clij2.copySlice(output, output_stack, i - 1);
+
+                if (i % 1000 == 0) System.gc();
+
             }
 
-
-
-            if (i%1000 == 0) System.gc();
-            savingTime = System.nanoTime() - markedTime;
-
-        }
-        ImagePlus final_normal_stack = clij2.pull(output_stack);
-        final_normal_stack.setTitle("normal");
-
-        if (output_stack != null) output_stack.close();
-
-
-        temp.close();
-        output.close();
-        clij2.clear();
-
-
-        long loopend = System.nanoTime() - loopstart;
-        long stopTime = System.nanoTime() - startTime;
-        if(!all_fits){
             new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
+
+            //Cleanup of clij2 data
+
+            temp.close();
+            output.close();
+            clij2.clear();
         } else {
-            final_normal_stack.show();
+            if (window % 2 == 0) window++;
+            RandomAccessibleInterval< UnsignedShortType > finalImage = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+
+            TemporalMedian.main(finalImage, window);
+            ImageJFunctions.show(finalImage);
         }
 
+
+        //Have to run this since otherwise the data will not be visible (does not change the data)
         IJ.run("Enhance Contrast", "saturated=0.0");
 
 
+
+
+        long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
         System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1000*1000)/spendTime))+ " MB/s");
-        System.out.println("GPU took " + String.format("%.3f", (double)loadingTime/1000000000) + " s (" + String.format("%.2f",100* (double)loadingTime/stopTime) + "% of total)");
-        System.out.println("GPU took " + String.format("%.3f", (double)medianTime/1000000000) + " s (" + String.format("%.2f",100* (double)medianTime/stopTime) + "% of total)");
-        System.out.println("Saving and garbage day took " + String.format("%.3f", (double)savingTime/1000000000) + " s (" + String.format("%.2f", 100*(double)savingTime/stopTime) + "% of total)");
-        System.out.println("Extra Loop Stuff took " + String.format("%.3f", (double)(loopend-savingTime-applicationTime-medianTime-loadingTime)/1000000000) + " s (" + String.format("%.2f", 100*(double)(loopend-savingTime-applicationTime-medianTime-loadingTime)/stopTime) + "% of total)");
 
         // other script
         // super small normal 0.45
@@ -386,29 +401,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         // 20k stack normal: 3.18s
         // 20k stack virtual 56s
 
-        // 18/09
-        // implemented multithreading and different median
-        // 47s on 1.5k large frame virtual 7979.5  kpxs
-        // 33.2s on 20k virtual comparison 2410.1 kpxs
-        // 0.95s on 400 virtual comparison 1686.7 kpxs
-        // 50s on 1.5k large frame normal 7495.4 kpxs
-        // 26.8s on 20k normal comparison 2987.2 kpxs
-        // 0.6s on 400 normal comparison 2384.9 kpxs
-
-        // 21/09
-        // initial gpu implementation with builtins
-        // 37.645s on 1.5k large frame normal 9952.4 kpxs
-        // 18.715s on 20k normal comparison 4273.7 kpxs
-        // 1.175s on 400 normal comparison  1361.7  kpxs
-
         // 22/09
-        // slightly different gpu implementation for smaller stacks
+        // combined 2 different methods depending on memory
+        // 1764.552s(30m) on 25 GB file 15.1 MB/s
         // 45.824s on 1.5k large frame virtual 17.0 MB/s
         // 48.023s on 20k virtual 3.5 MB/s
         // 1.76s on 400 virtual 1.7  MB/s
-        // 33.780 on 1.5k large frame normal 23.1 MB/s
-        // 18.091s on 20k normal 9.2 MB/s
-        // 1.193s on 400 normal 2.5 MB/s
+        // 6.255s on 1.5k large frame normal 124.9 MB/s
+        // 1.231s on 20k normal 134.8 MB/s
+        // 0.248s on 400 normal 12.1 MB/s
     }
 
 
@@ -432,4 +433,24 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         //thank you very cool
     }
 
+    public < T extends Type< T >> void copy(final RandomAccessible< T > source,
+                                            final IterableInterval< T > target )
+    {
+        // create a cursor that automatically localizes itself on every move
+        Cursor< T > targetCursor = target.localizingCursor();
+        RandomAccess< T > sourceRandomAccess = source.randomAccess();
+
+        // iterate over the input cursor
+        while ( targetCursor.hasNext())
+        {
+            // move input cursor forward
+            targetCursor.fwd();
+
+            // set the output cursor to the position of the input cursor
+            sourceRandomAccess.setPosition( targetCursor );
+
+            // set the value of this pixel of the output image, every Type supports T.set( T type )
+            targetCursor.get().set( sourceRandomAccess.get() );
+        }
+    }
 }
