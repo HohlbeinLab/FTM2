@@ -34,7 +34,6 @@ import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class TemporalMedian {
 
-
 	public static void main(RandomAccessibleInterval<UnsignedShortType> img, int window) {
 		final int windowC = (window - 1) / 2;
 		final int imgw = (int) img.dimension(0);

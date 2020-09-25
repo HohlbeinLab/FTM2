@@ -166,20 +166,16 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         if (!target_dir.endsWith("/")) target_dir += "/";
 
 
-
-
         if(!pre_loaded_image && !(new File(source_dir)).exists()){
             IJ.error("Error: source directory " + source_dir + " does not exist.");
             return DONE;
         }
-
 
         if (!(new File(target_dir)).exists()){
             if(!new File(target_dir).mkdir()) {
                 IJ.error("Error: Failed to create target directory " + target_dir);
             }
         }
-
 
         boolean any_too_big = false;
 
@@ -218,8 +214,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                         Stack_no++;
                         System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + current_stack_size + " slices as virtual stack");
                     }
-                    //RandomAccessibleInterval< UnsignedShortType > start_window = Views.offsetInterval(imageData, new long[] {0, 0, 0}, new long[] {imageData.dimension(0), imageData.dimension(1) , window});
-                    //RandomAccessibleInterval< UnsignedShortType > end_window = Views.offsetInterval(imageData, new long[] {0, 0, current_stack_size - window}, new long[] {imageData.dimension(0), imageData.dimension(1) , current_stack_size});
 
                 }
 
@@ -228,17 +222,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 dimension = slice_width * slice_height; //Amount of pixels per image
                 bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
 
-                //ImagePlus temp = new ImagePlus("temp", vstacks.get(0));
-
-
-                //Img<UnsignedShortType> img = VirtualStackAdapter.wrapShort(temp);
-
-
-
-                //ImageJFunctions.show(img);
             }
         } else {
-            imageData = ImageJFunctions.wrapReal(WindowManager.getCurrentImage());
+            all_fits = true;
+
+            imageData = ImageJFunctions.wrapReal(imp);
 
             int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
             total_size += current_stack_size;
@@ -269,7 +257,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
     @Override
     public void run(){
-
         ImagePlus openImage = WindowManager.getCurrentImage();
         if (openImage == null){
             System.out.println("found no image");
@@ -280,7 +267,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             setup("", openImage);
             run(openImage.getProcessor());
         }
-        //OtherRun();
     }
 
     @Override
@@ -388,16 +374,12 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         IJ.run("Enhance Contrast", "saturated=0.0");
 
 
-
-
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
         System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1000*1000)/spendTime))+ " MB/s");
 
         // other script
-        // super small normal 0.45
-        // super small virtual 1.250
         // 20k stack normal: 3.18s
         // 20k stack virtual 56s
 
@@ -416,8 +398,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     public static void main(String[] args) {
 
         final ImageJ IJ_Instance = new ImageJ();
-        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
-        //imp.show();
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
+        imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	
