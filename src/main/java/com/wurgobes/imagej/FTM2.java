@@ -22,7 +22,9 @@ import net.imglib2.cache.img.DiskCachedCellImgFactory;
 import net.imglib2.cache.img.DiskCachedCellImgOptions;
 import net.imglib2.cache.img.SingleCellArrayImg;
 import net.imglib2.img.Img;
+import net.imglib2.img.ImgFactory;
 import net.imglib2.img.VirtualStackAdapter;
+import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
@@ -47,22 +49,58 @@ import net.imglib2.type.Type;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
+import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.*; 
 import java.awt.image.ColorModel;
 
 import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
+import javax.swing.*;
+import java.awt.event.ActionListener;
+
+class MultiFileSelect implements ActionListener {
+
+    File[] files = null;
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setMultiSelectionEnabled(true);
+        chooser.showOpenDialog(new JFrame());
+        files = chooser.getSelectedFiles();
+        IJ.showMessage("You selected: " + getFileNames());
+    }
+
+    public File[] getFiles(){
+        return files;
+    }
+
+    public String getFileNames(){
+        if(files == null) return "No files selected";
+        StringBuilder tmp = new StringBuilder();
+        for(File file: files){
+            tmp.append("\"").append(file.getName()).append("\" ");
+        }
+        return tmp.toString();
+    }
+
+    public String getFileNamesRegex(){
+        if(files == null) return "No files selected";
+        StringBuilder tmp = new StringBuilder().append("(");
+        for(File file: files){
+            tmp.append(file.getName()).append("|");
+        }
+        return tmp.substring(0, tmp.length()-1) + ")";
+    }
+}
+
 
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //public class FTM2 implements ExtendedPlugInFilter {
 public class FTM2 implements ExtendedPlugInFilter, Command {
 
-    //@Parameter
-    public static String sourceDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
 
-    //@Parameter
-    public static String outputDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
 
     public static int window = 50;
     public static int start = 1;
@@ -108,39 +146,53 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         }
     }
 
-
+    
 
     @Override
     public int setup(String arg, ImagePlus imp) {
         //TODO
         //Handle closure of the file select more graciously
         //Add an about
-        //Hyperstack support?
         //NOTE that the final implementation probably wont have the entire stack loaded into memory as a Imagestack, at most as a virtualstack
 
         boolean pre_loaded_image = imp != null;
+        boolean force_gpu = false;
+        String sourceDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
+        String outputDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
+        MultiFileSelect fs = new MultiFileSelect();
+        File[] selected_files = null;
 
-        GenericDialogPlus gd = new GenericDialogPlus("Register Virtual Stack");
+        GenericDialogPlus gd = new GenericDialogPlus("Settings");
 
+        gd.addMessage("Temporal Median Filter");
         gd.addDirectoryField("Source directory", sourceDirectory, 50);
+        gd.addMessage("or");
+        gd.addButton("Select Files", fs);
         gd.addDirectoryField("Output directory", outputDirectory, 50);
         gd.addNumericField("Window size", window, 0);
         gd.addNumericField("Begin", start, 0);
         gd.addNumericField("End (0 for all)", end, 0);
         gd.addCheckbox("Use open image?", pre_loaded_image);
+        gd.addCheckbox("Force GPU?", force_gpu);
+
 
         gd.showDialog();
 
         // Exit when canceled
-        if (gd.wasCanceled()) 
-                return DONE;
+        if (gd.wasCanceled())
+            return DONE;
+
+
 
         sourceDirectory = gd.getNextString();
+        selected_files =  fs.getFiles();
         outputDirectory = gd.getNextString();
         window = (int)gd.getNextNumber();
         start = (int)gd.getNextNumber();
         end = (int)gd.getNextNumber();
         pre_loaded_image = gd.getNextBoolean();
+        force_gpu = gd.getNextBoolean();
+
 
 
         //@Parameter
@@ -148,7 +200,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         target_dir = outputDirectory;
 
 
-        if (!pre_loaded_image && null == source_dir) {
+        if (!pre_loaded_image && null == source_dir && selected_files == null) {
             IJ.error("Error: No source directory was provided.");
             return DONE;
         }
@@ -157,7 +209,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             return DONE;
         }
 
-        if(!pre_loaded_image){
+        if(!pre_loaded_image && selected_files == null){
             source_dir = source_dir.replace('\\', '/');
             if (!source_dir.endsWith("/")) source_dir += "/";
         }
@@ -166,7 +218,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         if (!target_dir.endsWith("/")) target_dir += "/";
 
 
-        if(!pre_loaded_image && !(new File(source_dir)).exists()){
+        if(selected_files == null && !pre_loaded_image && !(new File(source_dir)).exists()){
             IJ.error("Error: source directory " + source_dir + " does not exist.");
             return DONE;
         }
@@ -177,31 +229,43 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             }
         }
 
-        boolean any_too_big = false;
-
         if(!pre_loaded_image){
-            File[] listOfFiles = new File(source_dir).listFiles();
+
+            File[] listOfFiles;
+
+            if (selected_files == null){
+                listOfFiles = new File(source_dir).listFiles();
+            } else {
+                listOfFiles = selected_files;
+            }
+
             assert listOfFiles != null;
 
 
             for(File file: listOfFiles){
                 total_disk_size += file.length();
-                if (file.length() > max_bytes) {
-                    any_too_big = true;
-                }
+
             }
-            all_fits = total_disk_size < max_bytes/ 3;
-            //all_fits = false;
+            all_fits = total_disk_size < max_bytes / 3 && !force_gpu;
+
+
+
             if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
 
-                ImagePlus temp_img = new FolderOpener().openFolder(source_dir);
+                ImagePlus temp_img;
+                if (selected_files != null) {
+                    temp_img = FolderOpener.open(listOfFiles[1].getParent(), "file=" + fs.getFileNamesRegex());
+
+                } else {
+                    temp_img = new FolderOpener().openFolder(source_dir);
+                }
                 imageData = ImageJFunctions.wrapReal(temp_img);
 
                 int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
                 total_size += current_stack_size;
                 System.out.println("Loaded opened image with " + current_stack_size + " slices with size " + total_disk_size + " as normal stack");
-            } else {
+            }  else {
                 IJ.showStatus("Creating Virtualstack(s)");
                 int Stack_no = 0;
                 for (int i = 0; i < listOfFiles.length; i++) {
@@ -214,7 +278,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                         Stack_no++;
                         System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + current_stack_size + " slices as virtual stack");
                     }
-
                 }
 
                 slice_height = vstacks.get(0).getHeight();
@@ -227,10 +290,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             all_fits = true;
 
             imageData = ImageJFunctions.wrapReal(imp);
+            total_disk_size = (long) imp.getSizeInBytes();
 
             int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
             total_size += current_stack_size;
-            System.out.println("Loaded opened image with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
+            System.out.println("Loaded already opened image with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
         }
         
 
@@ -363,10 +427,10 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             clij2.clear();
         } else {
             if (window % 2 == 0) window++;
-            RandomAccessibleInterval< UnsignedShortType > finalImage = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+            RandomAccessibleInterval< UnsignedShortType > data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
-            TemporalMedian.main(finalImage, window);
-            ImageJFunctions.show(finalImage);
+            TemporalMedian.main(data, window);
+            ImageJFunctions.show(data);
         }
 
 
@@ -377,7 +441,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
         System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
-        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1000*1000)/spendTime))+ " MB/s");
+        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1024*1024)/spendTime))+ " MB/s");
 
         // other script
         // 20k stack normal: 3.18s
@@ -391,15 +455,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         // 1.76s on 400 virtual 1.7  MB/s
         // 6.255s on 1.5k large frame normal 124.9 MB/s
         // 1.231s on 20k normal 134.8 MB/s
-        // 0.248s on 400 normal 12.1 MB/s
+        // 0.151s on 400 normal 14.5 MB/s
     }
 
 
     public static void main(String[] args) {
 
         final ImageJ IJ_Instance = new ImageJ();
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
-        imp.show();
+        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
+        //imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	

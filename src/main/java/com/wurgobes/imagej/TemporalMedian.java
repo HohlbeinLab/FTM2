@@ -27,14 +27,14 @@ SOFTWARE.
 import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 import net.imglib2.*;
 import net.imglib2.converter.Converters;
+import net.imglib2.img.Img;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class TemporalMedian {
 
-	public static void main(RandomAccessibleInterval<UnsignedShortType> img, int window) {
+	public static void  main(RandomAccessibleInterval<UnsignedShortType> img, int window) {
 		final int windowC = (window - 1) / 2;
 		final int imgw = (int) img.dimension(0);
         final int imgh = (int) img.dimension(1);
