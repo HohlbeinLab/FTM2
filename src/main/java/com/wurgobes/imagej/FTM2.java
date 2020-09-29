@@ -58,6 +58,9 @@ import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
 import javax.swing.*;
 import java.awt.event.ActionListener;
+import ij.gui.YesNoCancelDialog;
+
+
 
 class MultiFileSelect implements ActionListener {
 
@@ -65,11 +68,16 @@ class MultiFileSelect implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setMultiSelectionEnabled(true);
-        chooser.showOpenDialog(new JFrame());
-        files = chooser.getSelectedFiles();
-        IJ.showMessage("You selected: " + getFileNames());
+        if (e.getActionCommand().equals("Select Files")) {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setMultiSelectionEnabled(true);
+            chooser.showOpenDialog(new JFrame());
+            files = chooser.getSelectedFiles();
+            IJ.showMessage("You selected: " + getFileNames());
+        } else {
+            YesNoCancelDialog answer = new YesNoCancelDialog(new JFrame(), "Clear list of files", "Do you want to clear:" + getFileNames());
+            if(answer.yesPressed()) files = null;
+        }
     }
 
     public File[] getFiles(){
@@ -166,8 +174,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
         gd.addMessage("Temporal Median Filter");
         gd.addDirectoryField("Source directory", sourceDirectory, 50);
-        gd.addMessage("or");
         gd.addButton("Select Files", fs);
+        gd.addToSameRow();
+        gd.addButton("Clear Selected Files", fs);
         gd.addDirectoryField("Output directory", outputDirectory, 50);
         gd.addNumericField("Window size", window, 0);
         gd.addNumericField("Begin", start, 0);
