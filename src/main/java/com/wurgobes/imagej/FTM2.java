@@ -263,6 +263,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
 
 
+
             if(all_fits && !force_gpu){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
 
@@ -301,18 +302,18 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             }
         } else {
             int current_stack_size = 0;
-            if(force_gpu){
+            assert imp != null;
 
-                assert imp != null;
+            if(force_gpu && imp.getBitDepth() != 32){
                 vstacks.add(imp.getStack());
                 current_stack_size = vstacks.get(0).size();
                 slice_intervals.add(current_stack_size + total_size);
                 total_size += current_stack_size;
 
-                slice_height = vstacks.get(0).getHeight();
-                slice_width = vstacks.get(0).getWidth();
+                slice_height = imp.getHeight();
+                slice_width = imp.getWidth();
                 dimension = slice_width * slice_height; //Amount of pixels per image
-                bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+                bit_depth = imp.getBitDepth(); // bitdepth
                 total_disk_size = current_stack_size * dimension * bit_depth / 8;
             } else {
                 imageData = ImageJFunctions.wrapReal(imp);
@@ -342,6 +343,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         else IJ.error("this is very wrong");
 
         if(bit_depth == 32 && !all_fits) IJ.error("currently does not support 32 bit");
+        if(bit_depth == 32 && force_gpu) IJ.showMessage("Currently does not support 32-bit on GPU, reverting to CPU"); force_gpu = false;
 
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
@@ -382,7 +384,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             int frameoffset = 0;
 
 
-            final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
+            final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, vstacks.get(0).getColorModel(), target_dir);
             final_virtual_stack.setBitDepth(bit_depth);
 
             for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
@@ -463,7 +465,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             if (window % 2 == 0) window++;
 
             @SuppressWarnings("unchecked")
-            RandomAccessibleInterval< T > data = (RandomAccessibleInterval<T>) Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+            RandomAccessibleInterval< T > data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
