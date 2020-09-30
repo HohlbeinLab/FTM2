@@ -120,7 +120,7 @@ public class TemporalMedian {
 
     static  class RankMap
     {
-        public static final int U16_SIZE = 65536;
+
 
         private final int[] inputToRanked;
         private final int[] rankedToInput;
@@ -133,11 +133,21 @@ public class TemporalMedian {
 
         public static < T extends RealType< T > >  RankMap build(final IterableInterval<T> input)
         {
-            final boolean[] inihist = new boolean[U16_SIZE];
+
+            final int U8_SIZE = 256;
+            final int U16_SIZE = 65536;
+
+            int mapSize = 0;
+            if (input.firstElement().getBitsPerPixel() == 8) {
+                mapSize = U8_SIZE;
+            } else if (input.firstElement().getBitsPerPixel() == 16) {
+                mapSize = U16_SIZE;
+            }
+
+            final boolean[] inihist = new boolean[mapSize];
             input.forEach(t -> inihist[(int) t.getRealFloat()] = true);
 
-            final int mapSize = U16_SIZE;
-            final int[] inputToRanked = new int[ mapSize ];
+            final int[] inputToRanked = new int[ mapSize];
             final int[] rankedToInput = new int[ mapSize ];
             int r = 0;
             for ( int i = 0; i < inihist.length; ++i ) {

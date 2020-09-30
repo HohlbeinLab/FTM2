@@ -26,6 +26,7 @@ import net.imglib2.img.ImgFactory;
 import net.imglib2.img.VirtualStackAdapter;
 import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.ops.parse.token.Real;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
@@ -108,7 +109,7 @@ class MultiFileSelect implements ActionListener {
 
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //public class FTM2 implements ExtendedPlugInFilter {
-public class FTM2 implements ExtendedPlugInFilter, Command {
+public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
 
     public static int window = 50;
@@ -140,13 +141,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     private final long max_bytes = Runtime.getRuntime().maxMemory();
 
     private int bit_depth;
+
     private String bit_size_string;
 
-    private Img<UnsignedShortType> imageData;
+    private Img<T> imageData;
     private Dataset currentData;
 
+    boolean force_gpu = false;
 
-    
+
     public boolean saveImagePlus(final String path, ImagePlus impP){
         try {
                 return new FileSaver(impP).saveAsTiff(path);
@@ -165,7 +168,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         //NOTE that the final implementation probably wont have the entire stack loaded into memory as a Imagestack, at most as a virtualstack
 
         boolean pre_loaded_image = imp != null;
-        boolean force_gpu = false;
+
         String sourceDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
         String outputDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
         MultiFileSelect fs = new MultiFileSelect();
@@ -256,11 +259,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 total_disk_size += file.length();
 
             }
-            all_fits = total_disk_size < max_bytes / 1.5 && !force_gpu;
+            all_fits = total_disk_size < max_bytes / 1.5;
 
 
 
-            if(all_fits){ //All data can fit into memory at once
+            if(all_fits && !force_gpu){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
 
                 ImagePlus temp_img;
@@ -297,12 +300,31 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
             }
         } else {
+            int current_stack_size = 0;
+            if(force_gpu){
+
+                assert imp != null;
+                vstacks.add(imp.getStack());
+                current_stack_size = vstacks.get(0).size();
+                slice_intervals.add(current_stack_size + total_size);
+                total_size += current_stack_size;
+
+                slice_height = vstacks.get(0).getHeight();
+                slice_width = vstacks.get(0).getWidth();
+                dimension = slice_width * slice_height; //Amount of pixels per image
+                bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+                total_disk_size = current_stack_size * dimension * bit_depth / 8;
+            } else {
+                imageData = ImageJFunctions.wrapReal(imp);
+                total_disk_size = (long) imp.getSizeInBytes();
+                bit_depth = imageData.firstElement().getBitsPerPixel();
+
+                current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
+            }
+
             all_fits = true;
 
-            imageData = ImageJFunctions.wrapReal(imp);
-            total_disk_size = (long) imp.getSizeInBytes();
 
-            int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
             total_size += current_stack_size;
             System.out.println("Loaded already opened image with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
         }
@@ -319,6 +341,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Int";}
         else IJ.error("this is very wrong");
 
+        if(bit_depth == 32) IJ.error("currently does not support 32 bit");
 
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
@@ -328,10 +351,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         return DOES_8G + DOES_16 + DOES_32 + NO_IMAGE_REQUIRED + NO_UNDO;
     }
 
-    @Override
-    public void run(ImageProcessor imageProcessor) {
-        Process(null);
-    }
 
 
     @Override
@@ -340,20 +359,21 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         if (openImage == null){
             System.out.println("found no image");
             setup("", null);
-            Process(null);
+            run(null);
         } else {
             System.out.println("found image");
             setup("", openImage);
-            Process(openImage.getProcessor());
+            run(openImage.getProcessor());
         }
     }
 
-
-    public < T extends IntegerType< T >>  void Process(ImageProcessor ip) {
+    @Override
+    public void run(ImageProcessor ip) {
         long startTime = System.nanoTime();
 
 
-        if(!all_fits) {
+
+        if(!all_fits | force_gpu) {
             int start_window = start + window / 2;
             int end_window = end - window / 2;
 
@@ -364,7 +384,6 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
             final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, null, target_dir);
             final_virtual_stack.setBitDepth(bit_depth);
-            ColorModel cm = vstacks.get(0).getColorModel();
 
             for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
             ImageStack stack = vstacks.get(stack_index);
@@ -374,15 +393,15 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
             ClearCLBuffer output = clij2.create(temp);
 
-
             ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
+
             for(int k = start; k <= start + window; k++) {
                 if (k > slice_intervals.get(stack_index)) {
                     prev_stack_sizes += stack.size();
                     stack_index++;
                     stack = vstacks.get(stack_index);
                 }
-                temp_stack.addSlice("", new ShortProcessor(slice_width, slice_height, (short[]) stack.getPixels(k - prev_stack_sizes), cm).duplicate());
+                temp_stack.addSlice("", stack.getProcessor(k - prev_stack_sizes));
             }
             ImagePlus temp_image = new ImagePlus("temp", temp_stack);
 
@@ -479,7 +498,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     public static void main(String[] args) {
 
         final ImageJ IJ_Instance = new ImageJ();
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest2.tif");
         imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
@@ -496,24 +515,4 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         //thank you very cool
     }
 
-    public < T extends Type< T >> void copy(final RandomAccessible< T > source,
-                                            final IterableInterval< T > target )
-    {
-        // create a cursor that automatically localizes itself on every move
-        Cursor< T > targetCursor = target.localizingCursor();
-        RandomAccess< T > sourceRandomAccess = source.randomAccess();
-
-        // iterate over the input cursor
-        while ( targetCursor.hasNext())
-        {
-            // move input cursor forward
-            targetCursor.fwd();
-
-            // set the output cursor to the position of the input cursor
-            sourceRandomAccess.setPosition( targetCursor );
-
-            // set the value of this pixel of the output image, every Type supports T.set( T type )
-            targetCursor.get().set( sourceRandomAccess.get() );
-        }
-    }
 }
