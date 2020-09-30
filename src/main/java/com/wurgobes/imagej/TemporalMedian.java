@@ -1,5 +1,5 @@
 package com.wurgobes.imagej;
-/* Fast Temporal Median filter 
+/* Fast Temporal Median filter
 (c) 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
 It implementes the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
@@ -140,7 +140,7 @@ public class TemporalMedian {
             int mapSize = 0;
             if (input.firstElement().getBitsPerPixel() == 8) {
                 mapSize = U8_SIZE;
-            } else if (input.firstElement().getBitsPerPixel() == 16) {
+            } else {
                 mapSize = U16_SIZE;
             }
 

@@ -1,4 +1,35 @@
 package com.wurgobes.imagej;
+/* Fast Temporal Median filter
+(c) 2020 Martijn Gobes, Netherlands Cancer Institute.
+Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab
+and the Fast Temporal Median Filter by Rolf Harkes and Bram van den Broek at the Netherlands Cancer Institutes.
+
+
+Calculating the median from the ranked data, and processing each pixel in parallel.
+The filter is intended for pre-processing of single molecule localization data.
+v0.9
+
+The CPU implementation is based on the T.S. Huang method for fast median calculations.
+The GPU implementation makes use of CLIJ2, by Robert Haase.
+
+Used articles:
+T.S.Huang et al. 1979 - Original algorithm for CPU implementation
+Robert Haase et al. 2020 CLIJ: GPU-accelerated image processing for everyone
+
+This software is released under the GPL v3. You may copy, distribute and modify
+the software as long as you track changes/dates in source files. Any
+modifications to or software including (via compiler) GPL-licensed code
+must also be made available under the GPL along with build & install instructions.
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+ */
 
 import fiji.util.gui.GenericDialogPlus;
 
@@ -9,59 +40,28 @@ import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.*;
 import ij.io.FileSaver;
 import ij.WindowManager;
-
+import ij.gui.YesNoCancelDialog;
 
 import net.haesleinhuepf.clij.coremem.enums.NativeTypeEnum;
 import net.imagej.Dataset;
-import net.imagej.ImgPlus;
-import net.imagej.ops.transform.crop.CropImgPlus;
-import net.imglib2.*;
-import net.imglib2.RandomAccess;
-import net.imglib2.cache.img.CellLoader;
-import net.imglib2.cache.img.DiskCachedCellImgFactory;
-import net.imglib2.cache.img.DiskCachedCellImgOptions;
-import net.imglib2.cache.img.SingleCellArrayImg;
 import net.imglib2.img.Img;
-import net.imglib2.img.ImgFactory;
-import net.imglib2.img.VirtualStackAdapter;
-import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
-import net.imglib2.ops.parse.token.Real;
-import net.imglib2.type.Type;
-import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
-import net.imglib2.type.numeric.integer.UnsignedShortType;
+import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.view.Views;
+
 import org.scijava.plugin.*;
 import org.scijava.Priority;
 import org.scijava.command.Command;
 
-import net.haesleinhuepf.clij.CLIJ;
 import net.haesleinhuepf.clij.clearcl.ClearCLBuffer;
 import net.haesleinhuepf.clij2.CLIJ2;
 
-import io.scif.img.IO;
-import io.scif.img.ImgIOException;
-
-import net.imglib2.Cursor;
-import net.imglib2.IterableInterval;
-import net.imglib2.RandomAccessible;
-import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.img.Img;
-import net.imglib2.img.display.imagej.ImageJFunctions;
-import net.imglib2.type.Type;
-import net.imglib2.type.numeric.real.FloatType;
-import net.imglib2.view.Views;
-
 import java.awt.event.ActionEvent;
 import java.io.File;
-import java.util.*; 
-import java.awt.image.ColorModel;
-
-import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
-
+import java.util.*;
 import javax.swing.*;
 import java.awt.event.ActionListener;
-import ij.gui.YesNoCancelDialog;
 
 
 
@@ -341,7 +341,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Int";}
         else IJ.error("this is very wrong");
 
-        if(bit_depth == 32) IJ.error("currently does not support 32 bit");
+        if(bit_depth == 32 && !all_fits) IJ.error("currently does not support 32 bit");
 
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
