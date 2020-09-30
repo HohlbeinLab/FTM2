@@ -30,10 +30,10 @@ SOFTWARE.
 public class MedianHistogram {
     private final int window;
 
-    private final short[] hist; //Gray-level histogram init at 0
+    private final int[] hist; //Gray-level histogram init at 0
 
-    private short median;//The median of this pixel
-    private short aux;   //Marks the position of the median pixel in the column of the histogram, starting with 1
+    private int median;//The median of this pixel
+    private int aux;   //Marks the position of the median pixel in the column of the histogram, starting with 1
 
     /**
      * @param window window width of the median filter
@@ -44,13 +44,13 @@ public class MedianHistogram {
 
         //0 indexed sorted array has median at this position.
         int windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
-        hist = new short[maxVal + 1]; //Gray-level histogram init at 0
+        hist = new int[maxVal + 1]; //Gray-level histogram init at 0
 
-        hist[0] = (short) window;
-        aux = (short) (windowC +1);
+        hist[0] = window;
+        aux = windowC + 1;
         median = 0;
 
-        history = new short[window];
+        history = new int[window];
         hi = 0;
     }
 
@@ -58,20 +58,20 @@ public class MedianHistogram {
      * Get current median.
      * It only makes sense to call this after adding {@code windowWidth} pixels.
      */
-    public short get() {
+    public int get() {
         return median;
     }
-    public short getaux() {
+    public int getaux() {
     	return aux;
     }
-    public short[] gethist() {
+    public int[] gethist() {
     	return hist;
     }
     /**
      * Add new value to histogram
      */
-    public void add(final short pixel2) {
-        final short pixel = record(pixel2);
+    public void add(final int pixel2) {
+        final int pixel = record(pixel2);
 
         hist[pixel]--; //Removing old pixel
         hist[pixel2]++; //Adding new pixel
@@ -91,7 +91,7 @@ public class MedianHistogram {
                     {
                         j++;
                     }
-                    median = (short) (j);
+                    median = j;
                     aux = 1; //The median is the first pixel of its column
                 } else {
                     aux++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
@@ -105,7 +105,7 @@ public class MedianHistogram {
                     {
                         j--;
                     }
-                    median = (short) (j);
+                    median = j;
                     aux = hist[j]; //The median is the last pixel of its column
                 } else {
                     aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
@@ -127,7 +127,7 @@ public class MedianHistogram {
                         {
                             j++;
                         }
-                        median = (short) (j);
+                        median = j;
                         aux = 1; //The median is the first pixel of its column
                     }
                     //else, absolutely nothing changes
@@ -140,7 +140,7 @@ public class MedianHistogram {
                         {
                             j--;
                         }
-                        median = (short) (j);
+                        median = j;
                         aux = hist[j]; //The median is the last pixel of its column
                     } else {
                         aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
@@ -150,11 +150,11 @@ public class MedianHistogram {
         }
     }
 
-    private final short[] history;
+    private final int[] history;
     private int hi;
 
-    private short record(short value) {
-        final short old = history[hi];
+    private int record(int value) {
+        final int old = history[hi];
         history[hi] = value;
         if (++hi >= window)
             hi = 0;

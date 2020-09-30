@@ -27,6 +27,8 @@ import net.imglib2.img.VirtualStackAdapter;
 import net.imglib2.img.cell.CellImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.Type;
+import net.imglib2.type.numeric.IntegerType;
+import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 import org.scijava.plugin.*;
 import org.scijava.Priority;
@@ -107,7 +109,6 @@ class MultiFileSelect implements ActionListener {
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //public class FTM2 implements ExtendedPlugInFilter {
 public class FTM2 implements ExtendedPlugInFilter, Command {
-
 
 
     public static int window = 50;
@@ -255,7 +256,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
                 total_disk_size += file.length();
 
             }
-            all_fits = total_disk_size < max_bytes / 3 && !force_gpu;
+            all_fits = total_disk_size < max_bytes / 1.5 && !force_gpu;
 
 
 
@@ -264,7 +265,7 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
 
                 ImagePlus temp_img;
                 if (selected_files != null) {
-                    temp_img = FolderOpener.open(listOfFiles[1].getParent(), "file=" + fs.getFileNamesRegex());
+                    temp_img = FolderOpener.open(listOfFiles[0].getParent(), "file=" + fs.getFileNamesRegex());
 
                 } else {
                     temp_img = new FolderOpener().openFolder(source_dir);
@@ -327,6 +328,11 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         return DOES_8G + DOES_16 + DOES_32 + NO_IMAGE_REQUIRED + NO_UNDO;
     }
 
+    @Override
+    public void run(ImageProcessor imageProcessor) {
+        Process(null);
+    }
+
 
     @Override
     public void run(){
@@ -334,16 +340,16 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
         if (openImage == null){
             System.out.println("found no image");
             setup("", null);
-            run(null);
+            Process(null);
         } else {
             System.out.println("found image");
             setup("", openImage);
-            run(openImage.getProcessor());
+            Process(openImage.getProcessor());
         }
     }
 
-    @Override
-    public void run(ImageProcessor ip) {
+
+    public < T extends IntegerType< T >>  void Process(ImageProcessor ip) {
         long startTime = System.nanoTime();
 
 
@@ -436,7 +442,9 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
             clij2.clear();
         } else {
             if (window % 2 == 0) window++;
-            RandomAccessibleInterval< UnsignedShortType > data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+
+            @SuppressWarnings("unchecked")
+            RandomAccessibleInterval< T > data = (RandomAccessibleInterval<T>) Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
@@ -471,8 +479,8 @@ public class FTM2 implements ExtendedPlugInFilter, Command {
     public static void main(String[] args) {
 
         final ImageJ IJ_Instance = new ImageJ();
-        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder\\stack_small1.tif");
-        //imp.show();
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
+        imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	
