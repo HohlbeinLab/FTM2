@@ -12,6 +12,16 @@ v0.9
 The CPU implementation is based on the T.S. Huang method for fast median calculations.
 The GPU implementation makes use of CLIJ2, by Robert Haase.
 
+This program currently support any file size processing via the GPU method and virtualstacks.
+A much faster method is included via the CPU, but this required all imagedata to fit in memory.
+One can manually allocate more memory to the JavaVM to do allow for larger images.
+
+Currently only supports tif files
+Currently supports 8, 16, and 32 bit CPU processing
+Currently supports 8 and 16 bit GPU processing
+
+GPU and CPU implementation should be identical, but if discrepansies occur, one can force the GPU method
+
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for CPU implementation
 Robert Haase et al. 2020 CLIJ: GPU-accelerated image processing for everyone
@@ -43,7 +53,6 @@ import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
 import net.haesleinhuepf.clij.coremem.enums.NativeTypeEnum;
-import net.imagej.Dataset;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
@@ -106,111 +115,94 @@ class MultiFileSelect implements ActionListener {
     }
 }
 
-
-@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
-//public class FTM2 implements ExtendedPlugInFilter {
+//Settings for ImageJ, settings where it'll appear in the menu
+@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2")
+//T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
-
 
     public static int window = 50;
     public static int start = 1;
     public static int end = 0;
 
-    //@Parameter
     private String target_dir;
 
-    //@Parameter
     private final ArrayList<Integer> slice_intervals = new ArrayList<>();
-
-    //@Parameter
-    private int total_size = 0;
-
-    //@Parameter 
     private final ArrayList<ImageStack> vstacks = new ArrayList<>();
-    
-    private int dimension;
-    
-    private int slice_height;
-    private int slice_width;
 
-
+    private int total_size = 0;
+    private long total_disk_size = 0;
+    private final long max_bytes = Runtime.getRuntime().maxMemory();
     private boolean all_fits = false;
 
-    private long total_disk_size = 0;
-    
-    private final long max_bytes = Runtime.getRuntime().maxMemory();
-
+    private int slice_height;
+    private int slice_width;
     private int bit_depth;
-
     private String bit_size_string;
-
-    private Img<T> imageData;
-    private Dataset currentData;
 
     boolean force_gpu = false;
 
+    private Img<T> imageData;
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
+        //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not
         try {
-                return new FileSaver(impP).saveAsTiff(path);
+            return new FileSaver(impP).saveAsTiff(path);
         } catch (Exception e) {
-                return false;
+            return false;
         }
     }
 
-    
+    /*
+    Setup sets up a variety of variables like bitdepth and
+    dimension as well as loading the imagedata requested by the user into the type required.
 
+    arg will always be ""
+    imp will contain the already opened image, if one exists, otherwise it is null
+     */
     @Override
     public int setup(String arg, ImagePlus imp) {
-        //TODO
-        //Handle closure of the file select more graciously
-        //Add an about
-        //NOTE that the final implementation probably wont have the entire stack loaded into memory as a Imagestack, at most as a virtualstack
 
+        //set the flag if we have an image already opened (and thus loaded)
         boolean pre_loaded_image = imp != null;
 
-        String sourceDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
-        String outputDirectory="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
+        //Default strings for the source and output directories
+        String source_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
+        target_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
+
+        //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
         MultiFileSelect fs = new MultiFileSelect();
-        File[] selected_files = null;
 
+        //Create the setup dialogue and its components
         GenericDialogPlus gd = new GenericDialogPlus("Settings");
-
         gd.addMessage("Temporal Median Filter");
-        gd.addDirectoryField("Source directory", sourceDirectory, 50);
-        gd.addButton("Select Files", fs);
+        gd.addDirectoryField("Source directory", source_dir, 50);
+        gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
         gd.addToSameRow();
         gd.addButton("Clear Selected Files", fs);
-        gd.addDirectoryField("Output directory", outputDirectory, 50);
+        gd.addDirectoryField("Output directory", target_dir, 50);
         gd.addNumericField("Window size", window, 0);
         gd.addNumericField("Begin", start, 0);
         gd.addNumericField("End (0 for all)", end, 0);
         gd.addCheckbox("Use open image?", pre_loaded_image);
         gd.addCheckbox("Force GPU?", force_gpu);
 
-
+        //Show the dialogue
         gd.showDialog();
 
         // Exit when canceled
         if (gd.wasCanceled())
             return DONE;
 
-
-
-        sourceDirectory = gd.getNextString();
-        selected_files =  fs.getFiles();
-        outputDirectory = gd.getNextString();
+        //Retrieve all the information from the dialogue,
+        source_dir = gd.getNextString();
+        File[] selected_files = fs.getFiles();
+        target_dir = gd.getNextString();
         window = (int)gd.getNextNumber();
         start = (int)gd.getNextNumber();
         end = (int)gd.getNextNumber();
         pre_loaded_image = gd.getNextBoolean();
         force_gpu = gd.getNextBoolean();
 
-
-
-        //@Parameter
-        String source_dir = sourceDirectory;
-        target_dir = outputDirectory;
 
 
         if (!pre_loaded_image && null == source_dir && selected_files == null) {
@@ -242,6 +234,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             }
         }
 
+        int dimension;
         if(!pre_loaded_image){
 
             File[] listOfFiles;
@@ -296,12 +289,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
                 slice_height = vstacks.get(0).getHeight();
                 slice_width = vstacks.get(0).getWidth();
-                dimension = slice_width * slice_height; //Amount of pixels per image
                 bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
 
             }
         } else {
-            int current_stack_size = 0;
+            int current_stack_size;
             assert imp != null;
 
             if(force_gpu && imp.getBitDepth() != 32){
@@ -464,11 +456,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         } else {
             if (window % 2 == 0) window++;
 
-            @SuppressWarnings("unchecked")
             RandomAccessibleInterval< T > data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
+            saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"));
         }
 
 
@@ -479,7 +471,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
         System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
-        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (double)(total_disk_size/(1024*1024)/spendTime))+ " MB/s");
+        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
 
         // other script
         // 20k stack normal: 3.18s
@@ -499,7 +491,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
     public static void main(String[] args) {
 
-        final ImageJ IJ_Instance = new ImageJ();
         ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest2.tif");
         imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
