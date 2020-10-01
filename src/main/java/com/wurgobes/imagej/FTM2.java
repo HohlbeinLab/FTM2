@@ -60,7 +60,7 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.view.Views;
 
 import org.scijava.plugin.*;
-import org.scijava.Priority;
+
 import org.scijava.command.Command;
 
 import net.haesleinhuepf.clij.clearcl.ClearCLBuffer;
@@ -69,6 +69,7 @@ import net.haesleinhuepf.clij2.CLIJ2;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.*;
+
 import javax.swing.*;
 import java.awt.event.ActionListener;
 
@@ -296,7 +297,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             int current_stack_size;
             assert imp != null;
 
-            if(force_gpu && imp.getBitDepth() != 32){
+            if(force_gpu){
                 vstacks.add(imp.getStack());
                 current_stack_size = vstacks.get(0).size();
                 slice_intervals.add(current_stack_size + total_size);
@@ -312,14 +313,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 total_disk_size = (long) imp.getSizeInBytes();
                 bit_depth = imageData.firstElement().getBitsPerPixel();
 
-                current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
+                total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
             }
 
             all_fits = true;
 
 
-            total_size += current_stack_size;
-            System.out.println("Loaded already opened image with " + current_stack_size+ " slices with size " + total_disk_size + " as normal stack");
+            System.out.println("Loaded already opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
         }
         
 
@@ -328,14 +328,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         }
         
 
-        if (bit_depth == 0) {bit_depth = 16; bit_size_string = "Short";}
-        else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "Byte";}
-        else if (bit_depth <= 16) {bit_depth = 16; bit_size_string = "Short";}
-        else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Int";}
-        else IJ.error("this is very wrong");
+        if (bit_depth == 0) {bit_depth = 16; bit_size_string = "UnsignedShort";}
+        else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "UnsignedByte";}
+        else if (bit_depth <= 16) {bit_depth = 16; bit_size_string = "UnsignedShort";}
+        else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Float";}
+        else IJ.error("Bitdepth not Supported");
 
-        if(bit_depth == 32 && !all_fits) IJ.error("currently does not support 32 bit");
-        if(bit_depth == 32 && force_gpu) IJ.showMessage("Currently does not support 32-bit on GPU, reverting to CPU"); force_gpu = false;
 
         if(end == 0) end = total_size;
         if(window > total_size) window = total_size;
@@ -368,6 +366,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
 
         if(!all_fits | force_gpu) {
+            String opencl_code =
+                    "float value_original = READ_IMAGE(temp, sampler, POS_temp_INSTANCE(x, y, z, 0)).x;\n" +
+                    "WRITE_IMAGE(result, POS_result_INSTANCE(x, y, z, 0), CONVERT_result_PIXEL_TYPE(value_original < 0 ? 0 : value_original));\n";
+
+
+
             int start_window = start + window / 2;
             int end_window = end - window / 2;
 
@@ -384,8 +388,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
             CLIJ2 clij2 = CLIJ2.getInstance();
 
+
             ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
-            ClearCLBuffer output = clij2.create(temp);
+
+            ClearCLBuffer median = clij2.create(temp);
+
+
 
             ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
 
@@ -411,38 +419,47 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                     stack = vstacks.get(stack_index);
                 }
 
-                ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_stack.getProcessor((i - 1) % window + 1)));
+                ClearCLBuffer result = clij2.create(temp);
 
                 if (i == start) {
                     ClearCLBuffer input = clij2.push(temp_image);
-                    clij2.medianZProjection(input, temp);
+                    clij2.medianZProjection(input, median);
+                    input.close();
                 } else if (i >= start_window && i <= end_window) {
 
                     temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes + 1), (frameoffset % window + 1));
-
-                    frameoffset++;
                     temp_image.setStack(temp_stack);
 
+                    frameoffset++;
+
                     ClearCLBuffer input = clij2.push(temp_image);
-                    clij2.medianZProjection(input, temp);
+                    clij2.medianZProjection(input, median);
 
                     input.close();
                 }
 
-                clij2.subtractImages(current_frame_CL, temp, output);
+                ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_stack.getProcessor((i - 1) % window + 1)));
+
+                clij2.subtractImages(current_frame_CL, median, result);
 
                 current_frame_CL.close();
 
+                if(bit_depth == 32) {
+                    HashMap<String, ClearCLBuffer> parameters = new HashMap<>();
+                    clij2.copy(result, temp);
+                    parameters.put("temp", temp);
+                    parameters.put("result", result);
 
-                ImagePlus result = clij2.pull(output);
-                String save_path = target_dir + "\\slice" + i + ".tif";
-                if (!saveImagePlus(save_path, result)) {
-                    IJ.error("Failed to write to:" + save_path);
-                    System.exit(0);
+                    clij2.customOperation(opencl_code, "", parameters);
                 }
+
+                clij2.saveAsTIF(result, target_dir + "\\slice" + i + ".tif");
+                result.close();
+
                 final_virtual_stack.addSlice("slice" + i + ".tif");
 
                 if (i % 1000 == 0) System.gc();
+
 
             }
 
@@ -451,8 +468,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             //Cleanup of clij2 data
 
             temp.close();
-            output.close();
+            median.close();
             clij2.clear();
+
         } else {
             if (window % 2 == 0) window++;
 
@@ -460,7 +478,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
-            saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"));
+            if (!saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
+                IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
+                System.exit(0);
+            }
         }
 
 
@@ -486,12 +507,23 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         // 6.255s on 1.5k large frame normal 124.9 MB/s
         // 1.231s on 20k normal 134.8 MB/s
         // 0.151s on 400 normal 14.5 MB/s
+
+        // 22/09
+        // combined 2 different methods depending on memory
+        // 1764.552s(30m) on 25 GB file 15.1 MB/s
+        // 45.824s on 1.5k large frame virtual 17.0 MB/s
+        // 48.373s on 20k virtual 2.3 MB/s
+        // 1.76s on 400 virtual 1.7  MB/s
+        // 6.255s on 1.5k large frame normal 124.9 MB/s
+        // 1.231s on 20k normal 134.8 MB/s
+        // 0.151s on 400 normal 14.5 MB/s
     }
 
 
     public static void main(String[] args) {
 
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest2.tif");
+        ImageJ ij_instance = new ImageJ();
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
         imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
