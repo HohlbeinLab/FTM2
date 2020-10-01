@@ -57,8 +57,10 @@ import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.view.Views;
 
+import org.scijava.Priority;
 import org.scijava.plugin.*;
 
 import org.scijava.command.Command;
@@ -117,7 +119,7 @@ class MultiFileSelect implements ActionListener {
 }
 
 //Settings for ImageJ, settings where it'll appear in the menu
-@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2")
+@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
@@ -141,6 +143,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     private String bit_size_string;
 
     boolean force_gpu = false;
+    boolean save_data = false;
 
     private Img<T> imageData;
 
@@ -186,6 +189,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         gd.addNumericField("End (0 for all)", end, 0);
         gd.addCheckbox("Use open image?", pre_loaded_image);
         gd.addCheckbox("Force GPU?", force_gpu);
+        gd.addCheckbox("Save Image?", save_data);
+        gd.addToSameRow();
+        gd.addMessage("Note that datasets larger than ram or when forcing GPU will always be saved");
 
         //Show the dialogue
         gd.showDialog();
@@ -203,6 +209,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         end = (int)gd.getNextNumber();
         pre_loaded_image = gd.getNextBoolean();
         force_gpu = gd.getNextBoolean();
+        save_data = gd.getNextBoolean();
 
 
 
@@ -269,7 +276,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                     temp_img = new FolderOpener().openFolder(source_dir);
                 }
                 imageData = ImageJFunctions.wrapReal(temp_img);
-
+                ImageJFunctions.show(imageData);
                 int current_stack_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
                 total_size += current_stack_size;
                 System.out.println("Loaded opened image with " + current_stack_size + " slices with size " + total_disk_size + " as normal stack");
@@ -367,10 +374,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
         if(!all_fits | force_gpu) {
             String opencl_code =
-                    "float value_original = READ_IMAGE(temp, sampler, POS_temp_INSTANCE(x, y, z, 0)).x;\n" +
+                    "float value_original = READ_IMAGE(result, sampler, POS_result_INSTANCE(x, y, z, 0)).x;\n" +
                     "WRITE_IMAGE(result, POS_result_INSTANCE(x, y, z, 0), CONVERT_result_PIXEL_TYPE(value_original < 0 ? 0 : value_original));\n";
-
-
 
             int start_window = start + window / 2;
             int end_window = end - window / 2;
@@ -423,10 +428,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
                 if (i == start) {
                     ClearCLBuffer input = clij2.push(temp_image);
+
                     clij2.medianZProjection(input, median);
                     input.close();
                 } else if (i >= start_window && i <= end_window) {
-
                     temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes + 1), (frameoffset % window + 1));
                     temp_image.setStack(temp_stack);
 
@@ -446,20 +451,18 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
                 if(bit_depth == 32) {
                     HashMap<String, ClearCLBuffer> parameters = new HashMap<>();
-                    clij2.copy(result, temp);
-                    parameters.put("temp", temp);
-                    parameters.put("result", result);
 
+                    parameters.put("result", result);
                     clij2.customOperation(opencl_code, "", parameters);
                 }
-
                 clij2.saveAsTIF(result, target_dir + "\\slice" + i + ".tif");
+
+
                 result.close();
 
                 final_virtual_stack.addSlice("slice" + i + ".tif");
 
                 if (i % 1000 == 0) System.gc();
-
 
             }
 
@@ -474,11 +477,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         } else {
             if (window % 2 == 0) window++;
 
-            RandomAccessibleInterval< T > data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+            @SuppressWarnings("unchecked")
+            RandomAccessibleInterval< UnsignedShortType > data =(RandomAccessibleInterval<UnsignedShortType>) Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
-            if (!saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
+            if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
             }
@@ -498,33 +502,26 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         // 20k stack normal: 3.18s
         // 20k stack virtual 56s
 
-        // 22/09
-        // combined 2 different methods depending on memory
-        // 1764.552s(30m) on 25 GB file 15.1 MB/s
-        // 45.824s on 1.5k large frame virtual 17.0 MB/s
-        // 48.023s on 20k virtual 3.5 MB/s
-        // 1.76s on 400 virtual 1.7  MB/s
-        // 6.255s on 1.5k large frame normal 124.9 MB/s
-        // 1.231s on 20k normal 134.8 MB/s
-        // 0.151s on 400 normal 14.5 MB/s
 
-        // 22/09
-        // combined 2 different methods depending on memory
+        // 01/10
+        // now supports all bitdepths
+        // saving will make it much longer
         // 1764.552s(30m) on 25 GB file 15.1 MB/s
-        // 45.824s on 1.5k large frame virtual 17.0 MB/s
-        // 48.373s on 20k virtual 2.3 MB/s
-        // 1.76s on 400 virtual 1.7  MB/s
-        // 6.255s on 1.5k large frame normal 124.9 MB/s
-        // 1.231s on 20k normal 134.8 MB/s
-        // 0.151s on 400 normal 14.5 MB/s
+        // 31.532s on 1.5k large frame virtual 23.6 MB/s
+        // 61.272s on 20k virtual 2.6 MB/s
+        // 1.819s on 400 virtual 1.6 MB/s
+        // 7.275s on 1.5k large frame normal 102.3 MB/s
+        // 1.453s on 20k normal 108.8 MB/s
+        // 0.185s on 400 normal 16.2 MB/s
+
     }
 
 
     public static void main(String[] args) {
 
         ImageJ ij_instance = new ImageJ();
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
-        imp.show();
+        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
+        //imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	
