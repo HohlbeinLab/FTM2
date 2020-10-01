@@ -477,8 +477,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         } else {
             if (window % 2 == 0) window++;
 
-            @SuppressWarnings("unchecked")
-            RandomAccessibleInterval< UnsignedShortType > data =(RandomAccessibleInterval<UnsignedShortType>) Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+            RandomAccessibleInterval<T> data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
             ImageJFunctions.show(data);
@@ -510,6 +509,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         // 31.532s on 1.5k large frame virtual 23.6 MB/s
         // 61.272s on 20k virtual 2.6 MB/s
         // 1.819s on 400 virtual 1.6 MB/s
+        // 8.324 on 1.5k large frame 32b 171.8 MB/s
         // 7.275s on 1.5k large frame normal 102.3 MB/s
         // 1.453s on 20k normal 108.8 MB/s
         // 0.185s on 400 normal 16.2 MB/s
