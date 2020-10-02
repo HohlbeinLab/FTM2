@@ -228,20 +228,20 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             default:
-                                IJ.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
+                                System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
                                 return DONE;
                         }
                     } catch (Exception e) {
-                        IJ.error("Failed to parse argument:" + keyword_val[1]);
+                        System.out.println("Failed to parse argument:" + keyword_val[1]);
                         return DONE;
                     }
                 } else {
-                    IJ.error("Malformed token: " + a + ".\nDid you remember to include an =?");
+                    System.out.println("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
                     return DONE;
                 }
             }
             if ((source_dir.equals("") && file_string.equals("")) | target_dir.equals("") ) {
-                IJ.error("Argument string must contain source and target variables.");
+                System.out.println("Argument string must contain source and target variables.");
                 return DONE;
             }
 
