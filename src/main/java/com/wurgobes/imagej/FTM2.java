@@ -293,7 +293,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             IJ.error("Error: No source directory was provided.");
             return DONE;
         }
-        if (target_dir.equals("")) {
+        if (target_dir.equals("") && save_data) {
             IJ.error("Error: No output directory was provided.");
             return DONE;
         }
@@ -303,8 +303,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             if (!source_dir.endsWith("/")) source_dir += "/";
         }
 
-        target_dir = target_dir.replace('\\', '/');
-        if (!target_dir.endsWith("/")) target_dir += "/";
 
 
         if(selected_files == null && !pre_loaded_image && !(new File(source_dir)).exists()){
@@ -312,7 +310,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             return DONE;
         }
 
-        if (!(new File(target_dir)).exists()){
+        if (save_data && !(new File(target_dir)).exists()){
             if(!new File(target_dir).mkdir()) {
                 IJ.error("Error: Failed to create target directory " + target_dir);
             }
@@ -378,7 +376,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                         System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + current_stack_size + " slices as virtual stack");
                     }
                 }
-
+                if(!all_fits && !save_data) {
+                    IJ.showMessage("File is too large to not be cached to disk.");
+                    save_data = true;
+                }
                 slice_height = vstacks.get(0).getHeight();
                 slice_width = vstacks.get(0).getWidth();
                 bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
@@ -428,6 +429,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         if(end == 0) end = total_size;
         if(end > total_size) end = total_size;
         if(window > total_size) window = total_size;
+
+        if(save_data){
+            target_dir = target_dir.replace('\\', '/');
+            if (!target_dir.endsWith("/")) target_dir += "/";
+        }
         
         System.gc();
         
@@ -470,12 +476,22 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
 
             final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, vstacks.get(0).getColorModel(), target_dir);
+            final ImageStack final_normal_stack = new ImageStack(slice_width, slice_height);
+
             final_virtual_stack.setBitDepth(bit_depth);
+
 
             for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
             ImageStack stack = vstacks.get(stack_index);
 
-            CLIJ2 clij2 = CLIJ2.getInstance();
+            CLIJ2 clij2 = null;
+            try {
+                clij2 = CLIJ2.getInstance();
+            } catch (Exception e) {
+                IJ.error("CLIJ2 Initialisation failed. Did you update it to the newest version?");
+            }
+            assert clij2 != null;
+
 
 
             ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
@@ -539,18 +555,25 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                     parameters.put("result", result);
                     clij2.customOperation(opencl_code, "", parameters);
                 }
-                clij2.saveAsTIF(result, target_dir + "\\slice" + i + ".tif");
+
+                if(save_data) {
+                    clij2.saveAsTIF(result, target_dir + "\\slice" + i + ".tif");
+                    final_virtual_stack.addSlice("slice" + i + ".tif");
+                } else {
+                    final_normal_stack.addSlice(clij2.pull(result).getProcessor());
+                }
 
 
                 result.close();
-
-                final_virtual_stack.addSlice("slice" + i + ".tif");
-
                 if (i % 1000 == 0) System.gc();
 
             }
+            if (save_data) {
+                new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
+            } else {
+                new ImagePlus("normal", final_normal_stack).show(); //Displaying the final stack
+            }
 
-            new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
 
             //Cleanup of clij2 data
 
