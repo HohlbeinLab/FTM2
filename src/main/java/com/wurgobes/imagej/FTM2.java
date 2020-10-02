@@ -44,6 +44,7 @@ SOFTWARE.
 import fiji.util.gui.GenericDialogPlus;
 
 import ij.*;
+import ij.io.Opener;
 import ij.plugin.*;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
@@ -57,9 +58,9 @@ import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.view.Views;
 
+import org.apache.commons.lang.StringUtils;
 import org.scijava.Priority;
 import org.scijava.plugin.*;
 
@@ -118,6 +119,8 @@ class MultiFileSelect implements ActionListener {
     }
 }
 
+
+
 //Settings for ImageJ, settings where it'll appear in the menu
 @Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
@@ -156,6 +159,19 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         }
     }
 
+    public static String getTheClosestMatch(String[] strings, String target) {
+        int distance = Integer.MAX_VALUE;
+        String closest = null;
+        for (String compareString: strings) {
+            int currentDistance = StringUtils.getLevenshteinDistance(compareString, target);
+            if(currentDistance < distance) {
+                distance = currentDistance;
+                closest = compareString;
+            }
+        }
+        return closest;
+    }
+
     /*
     Setup sets up a variety of variables like bitdepth and
     dimension as well as loading the imagedata requested by the user into the type required.
@@ -163,61 +179,121 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     arg will always be ""
     imp will contain the already opened image, if one exists, otherwise it is null
      */
-    @Override
+
     public int setup(String arg, ImagePlus imp) {
+
+
 
         //set the flag if we have an image already opened (and thus loaded)
         boolean pre_loaded_image = imp != null;
 
         //Default strings for the source and output directories
         String source_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
+        String file_string = "";
         target_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
-
-        //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
+        File[] selected_files = null;
         MultiFileSelect fs = new MultiFileSelect();
 
-        //Create the setup dialogue and its components
-        GenericDialogPlus gd = new GenericDialogPlus("Settings");
-        gd.addMessage("Temporal Median Filter");
-        gd.addDirectoryField("Source directory", source_dir, 50);
-        gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
-        gd.addToSameRow();
-        gd.addButton("Clear Selected Files", fs);
-        gd.addDirectoryField("Output directory", target_dir, 50);
-        gd.addNumericField("Window size", window, 0);
-        gd.addNumericField("Begin", start, 0);
-        gd.addNumericField("End (0 for all)", end, 0);
-        gd.addCheckbox("Use open image?", pre_loaded_image);
-        gd.addCheckbox("Force GPU?", force_gpu);
-        gd.addCheckbox("Save Image?", save_data);
-        gd.addToSameRow();
-        gd.addMessage("Note that datasets larger than ram or when forcing GPU will always be saved");
+        arg = Macro.getOptions();
+        //arg = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif target=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output start=1 end=0 window=50 force_gpu=0 save_data=0";
+        if(arg != null && !arg.equals("")){
+            String[] arguments = arg.split(" ");
+            String[] keywords = {"source", "file","target", "start", "end", "window", "force_gpu", "save_data"};
+            for(String a : arguments) {
+                if (a.contains("=")) {
+                    String[] keyword_val = a.split("=");
+                    try {
+                        switch (keyword_val[0]) {
+                            case "source":
+                                source_dir = keyword_val[1];
+                                break;
+                            case "file":
+                                file_string = keyword_val[1];
+                            case "target":
+                                target_dir = keyword_val[1];
+                                break;
+                            case "start":
+                                start = Integer.parseInt(keyword_val[1]);
+                                break;
+                            case "end":
+                                end = Integer.parseInt(keyword_val[1]);
+                                break;
+                            case "window":
+                                window = Integer.parseInt(keyword_val[1]);
+                                break;
+                            case "force_gpu":
+                                force_gpu = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "save_data":
+                                save_data = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            default:
+                                IJ.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
+                                return DONE;
+                        }
+                    } catch (Exception e) {
+                        IJ.error("Failed to parse argument:" + keyword_val[1]);
+                        return DONE;
+                    }
+                } else {
+                    IJ.error("Malformed token: " + a + ".\nDid you remember to include an =?");
+                    return DONE;
+                }
+            }
+            if ((source_dir.equals("") && file_string.equals("")) | target_dir.equals("") ) {
+                IJ.error("Argument string must contain source and target variables.");
+                return DONE;
+            }
 
-        //Show the dialogue
-        gd.showDialog();
+        } else {
+            //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
 
-        // Exit when canceled
-        if (gd.wasCanceled())
-            return DONE;
+            //Create the setup dialogue and its components
+            GenericDialogPlus gd = new GenericDialogPlus("Settings");
+            gd.addMessage("Temporal Median Filter");
+            gd.addDirectoryField("Source directory", source_dir, 50);
+            gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
+            gd.addToSameRow();
+            gd.addButton("Clear Selected Files", fs);
+            gd.addDirectoryField("Output directory", target_dir, 50);
+            gd.addNumericField("Window size", window, 0);
+            gd.addNumericField("Begin", start, 0);
+            gd.addNumericField("End (0 for all)", end, 0);
+            gd.addCheckbox("Use open image?", pre_loaded_image);
+            gd.addCheckbox("Force GPU?", force_gpu);
+            gd.addCheckbox("Save Image?", save_data);
+            gd.addToSameRow();
+            gd.addMessage("Note that datasets larger than ram or when forcing GPU will always be saved");
 
-        //Retrieve all the information from the dialogue,
-        source_dir = gd.getNextString();
-        File[] selected_files = fs.getFiles();
-        target_dir = gd.getNextString();
-        window = (int)gd.getNextNumber();
-        start = (int)gd.getNextNumber();
-        end = (int)gd.getNextNumber();
-        pre_loaded_image = gd.getNextBoolean();
-        force_gpu = gd.getNextBoolean();
-        save_data = gd.getNextBoolean();
+            //Show the dialogue
+            gd.showDialog();
+
+            // Exit when canceled
+            if (gd.wasCanceled())
+                return DONE;
+
+            //Retrieve all the information from the dialogue,
+            source_dir = gd.getNextString();
+            selected_files = fs.getFiles();
+            target_dir = gd.getNextString();
+            window = (int)gd.getNextNumber();
+            start = (int)gd.getNextNumber();
+            end = (int)gd.getNextNumber();
+            pre_loaded_image = gd.getNextBoolean();
+            force_gpu = gd.getNextBoolean();
+            save_data = gd.getNextBoolean();
+        }
 
 
+        if(pre_loaded_image && imp == null){
+            IJ.error("No file was open."); return DONE;
+        }
 
-        if (!pre_loaded_image && null == source_dir && selected_files == null) {
+        if (!pre_loaded_image && source_dir.equals("") && selected_files == null) {
             IJ.error("Error: No source directory was provided.");
             return DONE;
         }
-        if (null == target_dir) {
+        if (target_dir.equals("")) {
             IJ.error("Error: No output directory was provided.");
             return DONE;
         }
@@ -249,8 +325,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
             if (selected_files == null){
                 listOfFiles = new File(source_dir).listFiles();
-            } else {
+            } else if (file_string.equals("")){
                 listOfFiles = selected_files;
+            } else {
+                try {
+                    listOfFiles = new File[]{new File(file_string)};
+                } catch (Exception e) {
+                    IJ.error("Could not open: " + file_string);
+                    return DONE;
+                }
             }
 
             assert listOfFiles != null;
@@ -271,7 +354,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 ImagePlus temp_img;
                 if (selected_files != null) {
                     temp_img = FolderOpener.open(listOfFiles[0].getParent(), "file=" + fs.getFileNamesRegex());
-
+                } else if (!file_string.equals("")) {
+                    temp_img = new Opener().openImage(file_string);
                 } else {
                     temp_img = new FolderOpener().openFolder(source_dir);
                 }
@@ -302,7 +386,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             }
         } else {
             int current_stack_size;
-            assert imp != null;
 
             if(force_gpu){
                 vstacks.add(imp.getStack());
@@ -356,13 +439,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public void run(){
         ImagePlus openImage = WindowManager.getCurrentImage();
         if (openImage == null){
-            System.out.println("found no image");
-            setup("", null);
-            run(null);
+            if(setup("", null) != 0){
+                run(null);
+            }
         } else {
-            System.out.println("found image");
-            setup("", openImage);
-            run(openImage.getProcessor());
+            if(setup("", openImage) != 0) {
+                run(openImage.getProcessor());
+            }
         }
     }
 
@@ -480,7 +563,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             RandomAccessibleInterval<T> data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
 
             TemporalMedian.main(data, window);
-            ImageJFunctions.show(data);
+            IJ.run("Revert");
             if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
@@ -516,6 +599,17 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
     }
 
+    @Override
+    public int showDialog(ImagePlus imagePlus, String s, PlugInFilterRunner plugInFilterRunner) {
+        return 0;
+    }
+
+    @Override
+    public void setNPasses(int i) {
+
+    }
+
+
 
     public static void main(String[] args) {
 
@@ -527,14 +621,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 	
     }
 
-    @Override
-    public int showDialog(ImagePlus ip, String string, PlugInFilterRunner pifr) {        
-        return 1;
-    }
 
-    @Override
-    public void setNPasses(int i) {
-        //thank you very cool
-    }
+
 
 }

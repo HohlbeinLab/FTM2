@@ -1,0 +1,1 @@
+run("Fast Temporal Median 2", "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder target=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output start=1 end=0 window = 50 force_gpu=0 save_data=0")
