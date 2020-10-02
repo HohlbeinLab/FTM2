@@ -426,6 +426,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
 
         if(end == 0) end = total_size;
+        if(end > total_size) end = total_size;
         if(window > total_size) window = total_size;
         
         System.gc();
