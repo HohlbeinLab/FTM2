@@ -142,13 +142,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     private int slice_height;
     private int slice_width;
     private int bit_depth;
+    private final double ratio = 1.3;
 
     boolean save_data = false;
 
     private Img<T> imageData;
 
     private int type = 0;
-
 
     FTM2(int t) {
         type = t;
@@ -188,6 +188,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public int setup(String arg, ImagePlus imp) {
         //set the flag if we have an image already opened (and thus loaded)
         boolean pre_loaded_image = imp != null;
+        if(type == 3 && !pre_loaded_image) {
+            IJ.showMessage("No opened file was found.\nPlease open a file and restart.");
+            return DONE;
+        }
 
         //Default strings for the source and output directories
         String source_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
@@ -254,7 +258,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             if(type == 0 | type == 1) gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
             if(type == 0 | type == 1) gd.addToSameRow();
             if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
-
+            if(type == 3) gd.addMessage("Will use already opened file:" + imp.getTitle());
             gd.addDirectoryField("Output directory", target_dir, 50);
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
@@ -262,7 +266,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             //gd.addCheckbox("Use open image?", pre_loaded_image);
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
-            gd.addMessage("Note that datasets larger than ram or when forcing GPU will always be saved");
+            gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
 
             //Show the dialogue
             gd.showDialog();
@@ -340,7 +344,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 total_disk_size += file.length();
 
             }
-            all_fits = total_disk_size < max_bytes / 1.5;
+            all_fits = total_disk_size < max_bytes / ratio;
 
 
             if(all_fits){ //All data can fit into memory at once
@@ -439,15 +443,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     @Override
     public void run(ImageProcessor ip) {
         long startTime = System.nanoTime();
+        long savingTime = 0;
+
 
         if(!all_fits) {
             if (window % 2 == 0) window++;
 
             int slice_size = (slice_height * slice_width * bit_depth)/8;
-            int slices_that_fit = min(min((int)(max_bytes/slice_size/1.5), end), total_size);
-            System.out.println(slices_that_fit);
-            System.out.printf("%.3f%n",  ((double)max_bytes)/(double)(1024*1024*1024));
-            System.out.printf("%.3f%n",  ((double)slices_that_fit * slice_size)/(double)(1024*1024*1024));
+            int slices_that_fit = min(min((int)(max_bytes/slice_size/ratio), end), total_size);
 
             ArrayList<int[]> brackets  = new ArrayList<>();
 
@@ -497,8 +500,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                     final_stack.addSlice(temp_temp_stack.getProcessor(j));
                 }
 
-                saveImagePlus(target_dir + "\\part" + k + ".tif", new ImagePlus("", final_stack));
-
+                long intertime = System.nanoTime();
+                saveImagePlus(target_dir + "\\part_" + (k + 1)+ ".tif", new ImagePlus("", final_stack));
+                savingTime += (System.nanoTime() - intertime);
 
                 System.gc();
             }
@@ -525,17 +529,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
         //Have to run this since otherwise the data will not be visible (does not change the data)
 
-
-
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
-        System.out.println("Script took " + String.format("%.3f",spendTime) + " s");
+        double savedTime = (double)savingTime/1000000000;
+        System.out.println("Script took " + String.format("%.3f", spendTime) + " s");
+        System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
-
-        // other script
-        // 20k stack normal: 3.18s
-        // 20k stack virtual 56s
-
 
         // 01/10
         // now supports all bitdepths
@@ -549,11 +548,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         // 1.453s on 20k normal 108.8 MB/s
         // 0.185s on 400 normal 16.2 MB/s
 
-
         // 03/10
         // deprecated gpu implementation
         // 728.586s (12m) on HDD on 25GB file 34.9 MB/s
-        // 7.764 on 1.5k large frame 32b 184.2 MB/s
+        // 120s (2m) on HDD on 4GB
+        // 7.764s on 1.5k large frame 32b 184.2 MB/s
         // 7.275s on 1.5k large frame normal 102.3 MB/s
         // 1.453s on 20k normal 108.8 MB/s
         // 0.144s on 400 normal 20.9 MB/s
@@ -575,8 +574,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public static void main(String[] args) {
 
         ImageJ ij_instance = new ImageJ();
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
-        imp.show();
+        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
+        //imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	
