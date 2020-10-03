@@ -53,7 +53,7 @@ import ij.io.FileSaver;
 import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
-import net.haesleinhuepf.clij.coremem.enums.NativeTypeEnum;
+
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
@@ -66,8 +66,6 @@ import org.scijava.plugin.*;
 
 import org.scijava.command.Command;
 
-import net.haesleinhuepf.clij.clearcl.ClearCLBuffer;
-import net.haesleinhuepf.clij2.CLIJ2;
 
 import java.awt.event.ActionEvent;
 import java.io.File;
@@ -75,6 +73,8 @@ import java.util.*;
 
 import javax.swing.*;
 import java.awt.event.ActionListener;
+
+import static java.lang.Math.min;
 
 
 class MultiFileSelect implements ActionListener {
@@ -142,9 +142,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     private int slice_height;
     private int slice_width;
     private int bit_depth;
-    private String bit_size_string;
 
-    boolean force_gpu = false;
     boolean save_data = false;
 
     private Img<T> imageData;
@@ -155,6 +153,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     FTM2(int t) {
         type = t;
     }
+
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
         //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not
@@ -200,7 +199,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         arg = Macro.getOptions();
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
-            String[] keywords = {"source", "file","target", "start", "end", "window", "force_gpu", "save_data"};
+            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data"};
             for(String a : arguments) {
                 if (a.contains("=")) {
                     String[] keyword_val = a.split("=");
@@ -222,9 +221,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                                 break;
                             case "window":
                                 window = Integer.parseInt(keyword_val[1]);
-                                break;
-                            case "force_gpu":
-                                force_gpu = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             case "save_data":
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
@@ -264,7 +260,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
             //gd.addCheckbox("Use open image?", pre_loaded_image);
-            gd.addCheckbox("Force GPU?", force_gpu);
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than ram or when forcing GPU will always be saved");
@@ -285,7 +280,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             end = (int)gd.getNextNumber();
             //pre_loaded_image = gd.getNextBoolean();
             pre_loaded_image = type == 3;
-            force_gpu = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
         }
 
@@ -321,7 +315,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             }
         }
 
-        int dimension;
+
         if(!pre_loaded_image){
 
             File[] listOfFiles;
@@ -349,7 +343,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             all_fits = total_disk_size < max_bytes / 1.5;
 
 
-            if(all_fits && !force_gpu){ //All data can fit into memory at once
+            if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
 
                 ImagePlus temp_img;
@@ -387,28 +381,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 slice_width = vstacks.get(0).getWidth();
                 bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
 
+                System.out.println("Loaded " + total_size + " slices as virtual stack with size " +String.format("%.3f",  ((double)total_disk_size)/(double)(1024*1024*1024)) + " GB");
+
             }
         } else {
-            int current_stack_size;
+            imageData = ImageJFunctions.wrapReal(imp);
+            total_disk_size = (long) imp.getSizeInBytes();
+            bit_depth = imageData.firstElement().getBitsPerPixel();
 
-            if(force_gpu){
-                vstacks.add(imp.getStack());
-                current_stack_size = vstacks.get(0).size();
-                slice_intervals.add(current_stack_size + total_size);
-                total_size += current_stack_size;
-
-                slice_height = imp.getHeight();
-                slice_width = imp.getWidth();
-                dimension = slice_width * slice_height; //Amount of pixels per image
-                bit_depth = imp.getBitDepth(); // bitdepth
-                total_disk_size = current_stack_size * dimension * bit_depth / 8;
-            } else {
-                imageData = ImageJFunctions.wrapReal(imp);
-                total_disk_size = (long) imp.getSizeInBytes();
-                bit_depth = imageData.firstElement().getBitsPerPixel();
-
-                total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
-            }
+            total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
 
             all_fits = true;
 
@@ -419,10 +400,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             IJ.error("Error: Stack must have size larger than 1.");
         }
 
-        if (bit_depth == 0) {bit_depth = 16; bit_size_string = "UnsignedShort";}
-        else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "UnsignedByte";}
-        else if (bit_depth <= 16) {bit_depth = 16; bit_size_string = "UnsignedShort";}
-        else if (bit_depth <= 32) {bit_depth = 32; bit_size_string = "Float";}
+        if (bit_depth == 0) bit_depth = 16;
+        else if (bit_depth <= 8) bit_depth = 8;
+        else if (bit_depth <= 16) bit_depth = 16;
+        else if (bit_depth <= 32) bit_depth = 32;
         else IJ.error("Bitdepth not Supported");
 
 
@@ -445,11 +426,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public void run(){
         ImagePlus openImage = WindowManager.getCurrentImage();
         if (openImage == null){
-            if(setup("", null) != 0){
+            if(setup("", null) != DONE){
                 run(null);
             }
         } else {
-            if(setup("", openImage) != 0) {
+            if(setup("", openImage) != DONE) {
                 run(openImage.getProcessor());
             }
         }
@@ -459,121 +440,73 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public void run(ImageProcessor ip) {
         long startTime = System.nanoTime();
 
-        if(!all_fits | force_gpu) {
-            String opencl_code =
-                    "float value_original = READ_IMAGE(result, sampler, POS_result_INSTANCE(x, y, z, 0)).x;\n" +
-                    "WRITE_IMAGE(result, POS_result_INSTANCE(x, y, z, 0), CONVERT_result_PIXEL_TYPE(value_original < 0 ? 0 : value_original));\n";
+        if(!all_fits) {
+            if (window % 2 == 0) window++;
 
-            int start_window = start + window / 2;
-            int end_window = end - window / 2;
+            int slice_size = (slice_height * slice_width * bit_depth)/8;
+            int slices_that_fit = min(min((int)(max_bytes/slice_size/1.5), end), total_size);
+            System.out.println(slices_that_fit);
+            System.out.printf("%.3f%n",  ((double)max_bytes)/(double)(1024*1024*1024));
+            System.out.printf("%.3f%n",  ((double)slices_that_fit * slice_size)/(double)(1024*1024*1024));
 
-            int stack_index;
-            int prev_stack_sizes = 0;
-            int frameoffset = 0;
-
-
-            final VirtualStack final_virtual_stack = new VirtualStack(slice_width, slice_height, vstacks.get(0).getColorModel(), target_dir);
-            final ImageStack final_normal_stack = new ImageStack(slice_width, slice_height);
-
-            final_virtual_stack.setBitDepth(bit_depth);
+            ArrayList<int[]> brackets  = new ArrayList<>();
 
 
-            for(stack_index = 0; vstacks.get(stack_index).size() + prev_stack_sizes < start; stack_index++) prev_stack_sizes += vstacks.get(stack_index).size();
-            ImageStack stack = vstacks.get(stack_index);
+            int slices_left = total_size;
+            int lower_end = start;
 
-            CLIJ2 clij2 = null;
-            try {
-                clij2 = CLIJ2.getInstance();
-            } catch (Exception e) {
-                IJ.error("CLIJ2 Initialisation failed. Did you update it to the newest version?");
-            }
-            assert clij2 != null;
+            while(slices_left > 0){
+                slices_left -= slices_that_fit;
 
-
-            ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
-
-            ClearCLBuffer median = clij2.create(temp);
-
-
-            ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
-
-            for(int k = start; k <= start + window; k++) {
-                if (k > slice_intervals.get(stack_index)) {
-                    prev_stack_sizes += stack.size();
-                    stack_index++;
-                    stack = vstacks.get(stack_index);
-                }
-                temp_stack.addSlice("", stack.getProcessor(k - prev_stack_sizes));
-            }
-            ImagePlus temp_image = new ImagePlus("temp", temp_stack);
-
-            for (int i = start; i <= end; i++) {
-
-                IJ.showStatus("Frame " + i + "/" + total_size);
-                IJ.showProgress(i, total_size);
-
-
-                if (i < end - window && i + window / 2 > slice_intervals.get(stack_index)) {
-                    prev_stack_sizes += stack.size();
-                    stack_index++;
-                    stack = vstacks.get(stack_index);
-                }
-
-                ClearCLBuffer result = clij2.create(temp);
-
-                if (i == start) {
-                    ClearCLBuffer input = clij2.push(temp_image);
-
-                    clij2.medianZProjection(input, median);
-                    input.close();
-                } else if (i >= start_window && i <= end_window) {
-                    temp_stack.setProcessor(stack.getProcessor(frameoffset + window - prev_stack_sizes + 1), (frameoffset % window + 1));
-                    temp_image.setStack(temp_stack);
-
-                    frameoffset++;
-
-                    ClearCLBuffer input = clij2.push(temp_image);
-                    clij2.medianZProjection(input, median);
-
-                    input.close();
-                }
-
-                ClearCLBuffer current_frame_CL = clij2.push(new ImagePlus("", temp_stack.getProcessor((i - 1) % window + 1)));
-
-                clij2.subtractImages(current_frame_CL, median, result);
-
-                current_frame_CL.close();
-
-                if(bit_depth == 32) {
-                    HashMap<String, ClearCLBuffer> parameters = new HashMap<>();
-
-                    parameters.put("result", result);
-                    clij2.customOperation(opencl_code, "", parameters);
-                }
-
-                if(save_data) {
-                    clij2.saveAsTIF(result, target_dir + "\\slice" + i + ".tif");
-                    final_virtual_stack.addSlice("slice" + i + ".tif");
-                } else {
-                    final_normal_stack.addSlice(clij2.pull(result).getProcessor());
-                }
-
-                result.close();
-                if (i % 1000 == 0) System.gc();
-
-            }
-            if (save_data) {
-                new ImagePlus("virtual", final_virtual_stack).show(); //Displaying the final stack
-            } else {
-                new ImagePlus("normal", final_normal_stack).show(); //Displaying the final stack
+                brackets.add(new int[]{lower_end, min(slices_that_fit + lower_end, end)});
+                lower_end = min(slices_that_fit + lower_end, end);
             }
 
+            ImageStack temp_temp_stack;
+            for(int k = 0; k < brackets.size(); k++) {
+                int[] t = brackets.get(k);
 
-            //Cleanup of clij2 data
+                temp_temp_stack = new ImageStack(slice_width, slice_height);
+                int s = t[0] == start ? start : t[0] - window/2;
+                int e = t[1] == end ? end : t[1] + window/2;
 
-            temp.close();
-            median.close();
-            clij2.clear();
+                int temp_index;
+                int temp_prev_sizes = 0;
+
+                for(temp_index = 0; vstacks.get(temp_index).size() + temp_prev_sizes < s; temp_index++) temp_prev_sizes += vstacks.get(temp_index).size();
+
+                for(int i = s; i <= e; i++ ) {
+                    if(i > slice_intervals.get(temp_index)){
+                        temp_prev_sizes += vstacks.get(temp_index).size();
+                        temp_index++;
+                    }
+                    temp_temp_stack.addSlice("" + i, vstacks.get(temp_index).getProcessor(i - temp_prev_sizes));
+                }
+
+                System.out.println("Loaded from slice " +  s + " till slice " + e);
+                ImagePlus temp_imp = new ImagePlus("", temp_temp_stack);
+
+
+                Img<T> temp_imglib = ImageJFunctions.wrapReal(temp_imp);
+
+                TemporalMedian.main(temp_imglib, window);
+
+                ImageStack final_stack = new ImageStack(slice_width, slice_height);
+
+                for(int j = t[0] == start ? 1 : window/2 + 1; j <= (t[1] == end ? temp_temp_stack.size() : temp_temp_stack.size() - window/2 - 1); j++){
+                    final_stack.addSlice(temp_temp_stack.getProcessor(j));
+                }
+
+                saveImagePlus(target_dir + "\\part" + k + ".tif", new ImagePlus("", final_stack));
+
+
+                System.gc();
+            }
+
+            for(int k = 0; k < brackets.size(); k++) {
+                IJ.openVirtual(target_dir + "\\part" + k + ".tif").show();
+                IJ.run("Enhance Contrast", "saturated=0.0");
+            }
 
         } else {
             if (window % 2 == 0) window++;
@@ -586,11 +519,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
             }
+            IJ.run("Enhance Contrast", "saturated=0.0");
         }
 
 
         //Have to run this since otherwise the data will not be visible (does not change the data)
-        IJ.run("Enhance Contrast", "saturated=0.0");
+
 
 
         long stopTime = System.nanoTime() - startTime;
@@ -615,6 +549,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         // 1.453s on 20k normal 108.8 MB/s
         // 0.185s on 400 normal 16.2 MB/s
 
+
+        // 03/10
+        // deprecated gpu implementation
+        // 728.586s (12m) on HDD on 25GB file 34.9 MB/s
+        // 7.764 on 1.5k large frame 32b 184.2 MB/s
+        // 7.275s on 1.5k large frame normal 102.3 MB/s
+        // 1.453s on 20k normal 108.8 MB/s
+        // 0.144s on 400 normal 20.9 MB/s
+
     }
 
     @Override
@@ -632,8 +575,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     public static void main(String[] args) {
 
         ImageJ ij_instance = new ImageJ();
-        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
-        //imp.show();
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
+        imp.show();
         IJ.runPlugIn(FTM2.class.getName(), "");
 
 	
