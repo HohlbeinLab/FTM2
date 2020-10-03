@@ -1,6 +1,6 @@
 package com.wurgobes.imagej;
 /* Fast Temporal Median filter
-(c) 2020 Martijn Gobes, Netherlands Cancer Institute.
+(c) 2020 Martijn Gobes, Wageningen University.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab
 and the Fast Temporal Median Filter by Rolf Harkes and Bram van den Broek at the Netherlands Cancer Institutes.
 
@@ -77,7 +77,6 @@ import javax.swing.*;
 import java.awt.event.ActionListener;
 
 
-
 class MultiFileSelect implements ActionListener {
 
     File[] files = null;
@@ -120,10 +119,10 @@ class MultiFileSelect implements ActionListener {
 }
 
 
-
 //Settings for ImageJ, settings where it'll appear in the menu
-@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median 2", label="FTM2", priority = Priority.VERY_HIGH)
+
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
+@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median>EveryThing", label="FTM2", priority = Priority.VERY_HIGH)
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
     public static int window = 50;
@@ -149,6 +148,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     boolean save_data = false;
 
     private Img<T> imageData;
+
+    private int type = 0;
+
+
+    FTM2(int t) {
+        type = t;
+    }
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
         //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not
@@ -181,9 +187,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
      */
 
     public int setup(String arg, ImagePlus imp) {
-
-
-
         //set the flag if we have an image already opened (and thus loaded)
         boolean pre_loaded_image = imp != null;
 
@@ -195,7 +198,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         MultiFileSelect fs = new MultiFileSelect();
 
         arg = Macro.getOptions();
-        //arg = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif target=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output start=1 end=0 window=50 force_gpu=0 save_data=0";
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
             String[] keywords = {"source", "file","target", "start", "end", "window", "force_gpu", "save_data"};
@@ -244,22 +246,24 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 System.out.println("Argument string must contain source and target variables.");
                 return DONE;
             }
-
         } else {
-            //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
 
+            //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
             //Create the setup dialogue and its components
             GenericDialogPlus gd = new GenericDialogPlus("Settings");
             gd.addMessage("Temporal Median Filter");
-            gd.addDirectoryField("Source directory", source_dir, 50);
-            gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
-            gd.addToSameRow();
-            gd.addButton("Clear Selected Files", fs);
+
+            if(type == 0 | type == 2) gd.addDirectoryField("Source directory", source_dir, 50);
+
+            if(type == 0 | type == 1) gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
+            if(type == 0 | type == 1) gd.addToSameRow();
+            if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
+
             gd.addDirectoryField("Output directory", target_dir, 50);
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
-            gd.addCheckbox("Use open image?", pre_loaded_image);
+            //gd.addCheckbox("Use open image?", pre_loaded_image);
             gd.addCheckbox("Force GPU?", force_gpu);
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
@@ -273,13 +277,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 return DONE;
 
             //Retrieve all the information from the dialogue,
-            source_dir = gd.getNextString();
-            selected_files = fs.getFiles();
+            if(type == 0 | type == 2) source_dir = gd.getNextString();
+            if(type == 0 | type == 1) selected_files = fs.getFiles();
             target_dir = gd.getNextString();
             window = (int)gd.getNextNumber();
             start = (int)gd.getNextNumber();
             end = (int)gd.getNextNumber();
-            pre_loaded_image = gd.getNextBoolean();
+            //pre_loaded_image = gd.getNextBoolean();
+            pre_loaded_image = type == 3;
             force_gpu = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
         }
@@ -342,8 +347,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
             }
             all_fits = total_disk_size < max_bytes / 1.5;
-
-
 
 
             if(all_fits && !force_gpu){ //All data can fit into memory at once
@@ -409,15 +412,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
             all_fits = true;
 
-
             System.out.println("Loaded already opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
         }
-        
 
         if(total_size <= 1){
             IJ.error("Error: Stack must have size larger than 1.");
         }
-        
 
         if (bit_depth == 0) {bit_depth = 16; bit_size_string = "UnsignedShort";}
         else if (bit_depth <= 8) {bit_depth = 8; bit_size_string = "UnsignedByte";}
@@ -441,7 +441,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     }
 
 
-
     @Override
     public void run(){
         ImagePlus openImage = WindowManager.getCurrentImage();
@@ -459,8 +458,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     @Override
     public void run(ImageProcessor ip) {
         long startTime = System.nanoTime();
-
-
 
         if(!all_fits | force_gpu) {
             String opencl_code =
@@ -493,11 +490,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             assert clij2 != null;
 
 
-
             ClearCLBuffer temp = clij2.create(new long[]{slice_width, slice_height}, NativeTypeEnum.valueOf(bit_size_string));
 
             ClearCLBuffer median = clij2.create(temp);
-
 
 
             ImageStack temp_stack = new ImageStack(stack.getWidth(), stack.getHeight());
@@ -562,7 +557,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 } else {
                     final_normal_stack.addSlice(clij2.pull(result).getProcessor());
                 }
-
 
                 result.close();
                 if (i % 1000 == 0) System.gc();

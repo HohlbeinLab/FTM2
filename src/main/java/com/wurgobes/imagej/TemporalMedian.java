@@ -162,15 +162,6 @@ public class TemporalMedian {
 
             return new RankMap(inputToRanked, rankedToInput);
         }
-        /*
-        public void toRanked(final UnsignedShortType in, final UnsignedShortType out) {
-            out.set(inputToRanked[in.get()]);
-        }
-
-        public void fromRanked(final UnsignedShortType in, final UnsignedShortType out) {
-            out.set(rankedToInput[in.get()]);
-        }
-        */
 
         public int fromRanked(final int in) {
             return rankedToInput[in];
