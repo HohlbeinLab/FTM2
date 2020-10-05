@@ -51,7 +51,7 @@ public class TemporalMedian {
 		for (int ithread = 0; ithread < threads.length; ithread++) {
 			threads[ithread] = new Thread() { //make threads
 				{
-					setPriority(Thread.NORM_PRIORITY);
+					setPriority(Thread.MAX_PRIORITY);
 				}
 				public void run() {
 

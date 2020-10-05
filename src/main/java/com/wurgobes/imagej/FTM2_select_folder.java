@@ -1,5 +1,7 @@
 package com.wurgobes.imagej;
 
+import ij.IJ;
+import ij.ImageJ;
 import net.imglib2.type.numeric.RealType;
 import org.scijava.Priority;
 import org.scijava.command.Command;
@@ -13,4 +15,5 @@ public class FTM2_select_folder< T extends RealType< T >>  implements Command {
         FTM2<T> temp = new FTM2<>(2);
         temp.run();
     }
+
 }

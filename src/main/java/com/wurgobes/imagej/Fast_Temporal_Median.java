@@ -87,24 +87,24 @@ public class Fast_Temporal_Median implements PlugInFilter
 			if (setup.wasCanceled())
 				return;
 			ok = true;
-			normal = new String(setup.getNextRadioButton());
+			normal = setup.getNextRadioButton();
 			start = (int)(setup.getNextNumber());
 			end = (int)(setup.getNextNumber());
 			window = (int)(setup.getNextNumber());
 			if ((start < 1) || (start > (size-window)))
 			{
 				ok = false;
-				IJ.showMessage("Error","The start frame must be between 1 and " + String.valueOf(size-window));
+				IJ.showMessage("Error","The start frame must be between 1 and " + (size - window));
 			}
 			if ((end > size) || (end < window))
 			{
 				ok = false;
-				IJ.showMessage("Error","The end frame must be between " + String.valueOf(window) + " and " + String.valueOf(size));
+				IJ.showMessage("Error","The end frame must be between " + window + " and " + size);
 			}
 			if ((window < 2) || (window > size))
 			{
 				ok = false;
-				IJ.showMessage("Error","The window size must be between 2 and " + String.valueOf(size));
+				IJ.showMessage("Error","The window size must be between 2 and " + size);
 			}
 		}while(!ok);
 
@@ -129,7 +129,7 @@ public class Fast_Temporal_Median implements PlugInFilter
 		{
 			for (int k=start; k<=(size-window); k++) //Each passing creates one median frame
 			{
-				IJ.showStatus("Frame " + String.valueOf(k) + "/" + String.valueOf(size));
+				IJ.showStatus("Frame " + k + "/" + size);
 				IJ.showProgress(k,size);
 
 				//median = median.clone(); //Cloning the median, or else the changes would overlap the previous median
@@ -264,7 +264,7 @@ public class Fast_Temporal_Median implements PlugInFilter
 
 			for (int k=start; k<=(size-window); k++) //Each passing creates one median frame
 			{
-				IJ.showStatus("Frame " + String.valueOf(k) + "/" + String.valueOf(size));
+				IJ.showStatus("Frame " + k + "/" + size);
 				IJ.showProgress(k,size);
 
 				//median = median.clone(); //Cloning the median, or else the changes would overlap the previous median

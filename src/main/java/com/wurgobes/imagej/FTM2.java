@@ -122,7 +122,7 @@ class MultiFileSelect implements ActionListener {
 //Settings for ImageJ, settings where it'll appear in the menu
 
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
-@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median>EveryThing", label="FTM2", priority = Priority.VERY_HIGH)
+//@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median>EveryThing", label="FTM2", priority = Priority.VERY_HIGH)
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
     public static int window = 50;
@@ -144,11 +144,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     private int bit_depth;
     private final double ratio = 1.3;
 
-    boolean save_data = false;
+    private boolean save_data = false;
 
     private Img<T> imageData;
 
     private int type = 0;
+
+
 
     FTM2(int t) {
         type = t;
@@ -516,14 +518,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             if (window % 2 == 0) window++;
 
             RandomAccessibleInterval<T> data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
-
             TemporalMedian.main(data, window);
-            IJ.run("Revert");
+
             if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
             }
             IJ.run("Enhance Contrast", "saturated=0.0");
+
         }
 
 
@@ -536,17 +538,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
 
-        // 01/10
-        // now supports all bitdepths
-        // saving will make it much longer
-        // 1764.552s(30m) on 25 GB file 15.1 MB/s
-        // 31.532s on 1.5k large frame virtual 23.6 MB/s
-        // 61.272s on 20k virtual 2.6 MB/s
-        // 1.819s on 400 virtual 1.6 MB/s
-        // 8.324 on 1.5k large frame 32b 171.8 MB/s
-        // 7.275s on 1.5k large frame normal 102.3 MB/s
-        // 1.453s on 20k normal 108.8 MB/s
-        // 0.185s on 400 normal 16.2 MB/s
 
         // 03/10
         // deprecated gpu implementation
@@ -570,7 +561,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     }
 
 
-
     public static void main(String[] args) {
 
         ImageJ ij_instance = new ImageJ();
@@ -580,8 +570,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
 
 	
     }
-
-
 
 
 }
