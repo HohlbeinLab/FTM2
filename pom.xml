@@ -27,7 +27,7 @@
 	</organization>
 	<licenses>
 		<license>
-			<name>Simplified BSD License</name>
+			<name>GPL-3.0 License</name>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -57,10 +57,10 @@
 	</mailingLists>
 
 	<scm>
-		<connection>scm:git:git://github.com/imagej/example-imagej-command</connection>
-		<developerConnection>scm:git:git@github.com:imagej/example-imagej-command</developerConnection>
+		<connection>scm:git:git://github.com/HohlbeinLab/FTM2</connection>
+		<developerConnection>scm:git:git@github.com:DrNjitram</developerConnection>
 		<tag>HEAD</tag>
-		<url>https://github.com/imagej/example-imagej-command</url>
+		<url>https://github.com/HohlbeinLab/FTM2</url>
 	</scm>
 	<issueManagement>
 		<system>GitHub Issues</system>
