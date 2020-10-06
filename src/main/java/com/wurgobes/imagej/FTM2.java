@@ -107,22 +107,12 @@ class MultiFileSelect implements ActionListener {
         }
         return tmp.toString();
     }
-
-    public String getFileNamesRegex(){
-        if(files == null) return "No files selected";
-        StringBuilder tmp = new StringBuilder().append("(");
-        for(File file: files){
-            tmp.append(file.getName()).append("|");
-        }
-        return tmp.substring(0, tmp.length()-1) + ")";
-    }
 }
 
 
 //Settings for ImageJ, settings where it'll appear in the menu
 
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
-//@Plugin(type = Command.class, menuPath = "Plugins>Fast Temporal Median>EveryThing", label="FTM2", priority = Priority.VERY_HIGH)
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
     public static int window = 50;
@@ -196,9 +186,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         }
 
         //Default strings for the source and output directories
-        String source_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder"; //Change before release
+        String source_dir=""; //Change before release
         String file_string = "";
-        target_dir="C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";//Change before release
+        target_dir="";//Change before release
         File[] selected_files = null;
         MultiFileSelect fs = new MultiFileSelect();
 
@@ -261,7 +251,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             if(type == 0 | type == 1) gd.addToSameRow();
             if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
             if(type == 3) gd.addMessage("Will use already opened file:" + imp.getTitle());
-            gd.addDirectoryField("Output directory", target_dir, 50);
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
@@ -269,6 +258,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
+            gd.addDirectoryField("Output directory", target_dir, 50);
 
             //Show the dialogue
             gd.showDialog();
@@ -280,13 +270,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             //Retrieve all the information from the dialogue,
             if(type == 0 | type == 2) source_dir = gd.getNextString();
             if(type == 0 | type == 1) selected_files = fs.getFiles();
-            target_dir = gd.getNextString();
             window = (int)gd.getNextNumber();
             start = (int)gd.getNextNumber();
             end = (int)gd.getNextNumber();
             //pre_loaded_image = gd.getNextBoolean();
             pre_loaded_image = type == 3;
             save_data = gd.getNextBoolean();
+            target_dir = gd.getNextString();
         }
 
         //If we wanted a preloaded image, but nothing is opened = error
@@ -359,11 +349,31 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                 //Load the images into memory as a single stack. This will work when its multiple seperate files
                 ImagePlus temp_img;
                 if (selected_files != null) {
-                    //We can use the folderopener with regex to only load the files we want to load
-                    temp_img = FolderOpener.open(listOfFiles[0].getParent(), "file=" + fs.getFileNamesRegex());
+                    ImagePlus[] temp_imgs = new ImagePlus[selected_files.length];
+                    for(int i = 0; i < selected_files.length; i++){
+                        try {
+                            temp_imgs[i] = new Opener().openImage(selected_files[i].getAbsolutePath());
+                        } catch (Exception e) {
+                            System.out.println("Failed to open file: " + selected_files[i].getAbsolutePath());
+                            return DONE;
+                        }
+                    }
+                    try {
+                        temp_img = new Concatenator().concatenateHyperstacks(temp_imgs, "Concatenated", false);
+                    } catch (Exception e) {
+                        System.out.println("One or more of your files might not have the same dimension");
+                        return DONE;
+                    }
+
                 } else if (!file_string.equals("")) {
                     //One file to open via the commandline
-                    temp_img = new Opener().openImage(file_string);
+                    try {
+                        temp_img = new Opener().openImage(file_string);
+                    } catch (Exception e) {
+                        System.out.println("Failed to open file: " + file_string);
+                        return DONE;
+                    }
+
                 } else {
                     //Open all files inside the provided folder
                     temp_img = new FolderOpener().openFolder(source_dir);
