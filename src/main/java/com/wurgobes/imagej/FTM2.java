@@ -113,6 +113,7 @@ class MultiFileSelect implements ActionListener {
 //Settings for ImageJ, settings where it'll appear in the menu
 
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
+@Plugin(type = Command.class, label="FTM2_base", priority = Priority.VERY_HIGH)
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
 
     public static int window = 50;

@@ -5,7 +5,7 @@ import org.scijava.Priority;
 import org.scijava.command.Command;
 import org.scijava.plugin.Plugin;
 
-@Plugin(type = Command.class, menuPath = "Plugins>Faster Temporal Median>Select Files and Run", label="FTM2", priority = Priority.VERY_HIGH)
+@Plugin(type = Command.class, menuPath = "Plugins>Faster Temporal Median>Select Files and Run", label="FTM2_files", priority = Priority.VERY_HIGH)
 public class FTM2_select_files< T extends RealType< T >>  implements Command {
 
     @Override

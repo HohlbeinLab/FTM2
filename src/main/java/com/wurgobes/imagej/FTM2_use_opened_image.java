@@ -5,7 +5,7 @@ import org.scijava.Priority;
 import org.scijava.command.Command;
 import org.scijava.plugin.Plugin;
 
-@Plugin(type = Command.class, menuPath = "Plugins>Faster Temporal Median>Use Opened Image and Run", label="FTM2", priority = Priority.VERY_HIGH)
+@Plugin(type = Command.class, menuPath = "Plugins>Faster Temporal Median>Use Opened Image and Run", label="FTM2_opened", priority = Priority.VERY_HIGH)
 public class FTM2_use_opened_image< T extends RealType< T >>  implements Command {
 
     @Override
