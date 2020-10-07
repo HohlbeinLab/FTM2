@@ -1,4 +1,4 @@
-package com.wurgobes.imagej;
+package com.wurgobes.ftm2;
 /* Fast Temporal Median filter
 (c) 2020 Martijn Gobes, Wageningen University.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab
@@ -10,21 +10,14 @@ The filter is intended for pre-processing of single molecule localization data.
 v0.9
 
 The CPU implementation is based on the T.S. Huang method for fast median calculations.
-The GPU implementation makes use of CLIJ2, by Robert Haase.
-
-This program currently support any file size processing via the GPU method and virtualstacks.
-A much faster method is included via the CPU, but this required all imagedata to fit in memory.
-One can manually allocate more memory to the JavaVM to do allow for larger images.
 
 Currently only supports tif files
 Currently supports 8, 16, and 32 bit CPU processing
-Currently supports 8 and 16 bit GPU processing
 
-GPU and CPU implementation should be identical, but if discrepansies occur, one can force the GPU method
 
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for CPU implementation
-Robert Haase et al. 2020 CLIJ: GPU-accelerated image processing for everyone
+
 
 This software is released under the GPL v3. You may copy, distribute and modify
 the software as long as you track changes/dates in source files. Any
@@ -41,8 +34,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-import fiji.util.gui.GenericDialogPlus;
 
+import fiji.util.gui.GenericDialogPlus;
 import ij.*;
 import ij.io.Opener;
 import ij.plugin.*;
@@ -53,7 +46,6 @@ import ij.io.FileSaver;
 import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
-
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
@@ -61,21 +53,15 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
-import org.scijava.Priority;
-import org.scijava.plugin.*;
-
-import org.scijava.command.Command;
-
 
 import java.awt.event.ActionEvent;
-import java.io.File;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-
 import javax.swing.*;
 import java.awt.event.ActionListener;
 
 import static java.lang.Math.min;
-
 
 class MultiFileSelect implements ActionListener {
 
@@ -113,8 +99,7 @@ class MultiFileSelect implements ActionListener {
 //Settings for ImageJ, settings where it'll appear in the menu
 
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
-@Plugin(type = Command.class, label="FTM2_base", priority = Priority.VERY_HIGH)
-public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Command {
+public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, PlugIn {
 
     public static int window = 50;
     public static int start = 1;
@@ -170,6 +155,25 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         return closest;
     }
 
+
+    // print input stream
+    private static String GetInputStream(InputStream is) {
+        StringBuilder result = new StringBuilder();
+        try (InputStreamReader streamReader =
+                     new InputStreamReader(is, StandardCharsets.UTF_8);
+             BufferedReader reader = new BufferedReader(streamReader)) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                result.append(line);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result.toString();
+    }
+
     /*
     Setup sets up a variety of variables like bitdepth and
     dimension as well as loading the imagedata requested by the user into the type required.
@@ -187,9 +191,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
         }
 
         //Default strings for the source and output directories
-        String source_dir=""; //Change before release
+        String source_dir = "";
         String file_string = "";
-        target_dir="";//Change before release
+        target_dir = "";
         File[] selected_files = null;
         MultiFileSelect fs = new MultiFileSelect();
 
@@ -235,31 +239,36 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
                     return DONE;
                 }
             }
-            if ((source_dir.equals("") && file_string.equals("")) | target_dir.equals("") ) {
-                System.out.println("Argument string must contain source and target variables.");
+            if (source_dir.equals("") && file_string.equals("")) {
+                System.out.println("Argument string must contain source or file variables.");
+                return DONE;
+            }
+            if (save_data  && target_dir.equals("")) {
+                System.out.println("When saving is enabled, a target directory must be provided");
                 return DONE;
             }
         } else {
+            InputStream is = FTM2.class.getResourceAsStream("/README.txt"); // OK
+            String content = GetInputStream(is);
 
             //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
             //Create the setup dialogue and its components
-            GenericDialogPlus gd = new GenericDialogPlus("Settings");
-            gd.addMessage("Temporal Median Filter");
+            GenericDialogPlus gd = new GenericDialogPlus("Settings for Temporal Median Filter");
 
             if(type == 0 | type == 2) gd.addDirectoryField("Source directory", source_dir, 50);
 
             if(type == 0 | type == 1) gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
-            if(type == 0 | type == 1) gd.addToSameRow();
             if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
             if(type == 3) gd.addMessage("Will use already opened file:" + imp.getTitle());
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
-            //gd.addCheckbox("Use open image?", pre_loaded_image);
+
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
             gd.addDirectoryField("Output directory", target_dir, 50);
+            gd.addHelp(content);
 
             //Show the dialogue
             gd.showDialog();
@@ -286,7 +295,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
             return DONE;
         }
         //We want to pull from a source directory, but none was provided = error
-        if (!pre_loaded_image && source_dir.equals("") && selected_files == null) {
+        if (!pre_loaded_image && source_dir.equals("") && selected_files == null && file_string.equals("")) {
             IJ.error("Error: No source directory was provided.");
             return DONE;
         }
@@ -490,14 +499,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Co
     //It gets the current image that is selected, and passes that on to the setup and run function
     //If DONE is returned by setup, it does not run the run function
     @Override
-    public void run(){
+    public void run(String arg){
         ImagePlus openImage = WindowManager.getCurrentImage();
+        ImageProcessor Dummy = null;
         if (openImage == null){
-            if(setup("", null) != DONE){
-                run(null);
+            if(setup(arg, null) != DONE){
+                run(Dummy);
             }
         } else {
-            if(setup("", openImage) != DONE) {
+            if(setup(arg, openImage) != DONE) {
                 run(openImage.getProcessor());
             }
         }

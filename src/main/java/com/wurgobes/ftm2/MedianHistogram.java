@@ -1,4 +1,4 @@
-package com.wurgobes.imagej;
+package com.wurgobes.ftm2;
 /* Median finding histogram 
 (c) 2019 Rolf Harkes, Netherlands Cancer Institute.
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.

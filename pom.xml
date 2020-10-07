@@ -5,6 +5,7 @@
 		http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
+
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
@@ -13,8 +14,8 @@
 	</parent>
 
 	<groupId>com.wurgobes</groupId>
-	<artifactId>FTM2</artifactId>
-	<version>0.1.0-SNAPSHOT</version>
+	<artifactId>FTM_2</artifactId>
+	<version>0.9-SNAPSHOT</version>
 
 
 	<name>Fast Median Temporal 2</name>
@@ -64,19 +65,22 @@
 	</scm>
 	<issueManagement>
 		<system>GitHub Issues</system>
-		<url>https://github.com/imagej/example-imagej-command/issues</url>
+		<url>https://github.com/HohlbeinLab/FTM2/issues</url>
 	</issueManagement>
 	<ciManagement>
 		<system>None</system>
 	</ciManagement>
 
 	<properties>
-		<package-name>com.wurgobes.imagej</package-name>
-		<main-class>com.wurgobes.imagej.FTM2</main-class>
+		<package-name>com.wurgobes.ftm2</package-name>
+		<main-class>com.wurgobes.ftm2.FTM2</main-class>
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>WUR, Inc.</license.copyrightOwners>
 		<scijava.app.directory>C:\Users\Martijn\Desktop\Thesis2020\ImageJ\fiji-win64\Fiji.app</scijava.app.directory>
 	</properties>
+
+
+
 
 	<repositories>
 		<repository>
@@ -92,12 +96,21 @@
 	<dependencies>
 		<dependency>
 			<groupId>net.imagej</groupId>
-			<artifactId>imagej</artifactId>
+			<artifactId>ij</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>net.haesleinhuepf</groupId>
-			<artifactId>clij2_</artifactId>
-			<version>2.1.1.0</version>
+			<groupId>net.imglib2</groupId>
+			<artifactId>imglib2-ij</artifactId>
+			<version>2.0.0-beta-46</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>fiji-lib</artifactId>
+			<version>2.1.2</version>
 		</dependency>
 	</dependencies>
 	
