@@ -37,6 +37,8 @@ SOFTWARE.
 
 import fiji.util.gui.GenericDialogPlus;
 import ij.*;
+import ij.gui.DialogListener;
+import ij.gui.GenericDialog;
 import ij.io.Opener;
 import ij.plugin.*;
 import ij.plugin.filter.ExtendedPlugInFilter;
@@ -54,6 +56,7 @@ import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
 
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -251,6 +254,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             InputStream is = FTM2.class.getResourceAsStream("/README.txt"); // OK
             String content = GetInputStream(is);
 
+
+
             //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
             //Create the setup dialogue and its components
             GenericDialogPlus gd = new GenericDialogPlus("Settings for Temporal Median Filter");
@@ -260,6 +265,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             if(type == 0 | type == 1) gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
             if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
             if(type == 3) gd.addMessage("Will use already opened file:" + imp.getTitle());
+
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
@@ -269,6 +275,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
             gd.addDirectoryField("Output directory", target_dir, 50);
             gd.addHelp(content);
+
+
 
             //Show the dialogue
             gd.showDialog();
@@ -605,6 +613,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 IJ.run("Enhance Contrast", "saturated=0.0");
             }
 
+
         } else {
             RandomAccessibleInterval<T> data;
             if(start != 1 | end != total_size) {
@@ -616,8 +625,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
             //Then process the data, either on the smaller view or the entire dataset
             TemporalMedian.main(imageData, window);
+
+            //This is just to refresh the image
+            IJ.setSlice(2);
+            IJ.setSlice(1);
+
             //Run the contrast command to readjust the min and max
             IJ.run("Enhance Contrast", "saturated=0.0");
+
 
             //If needed try to save the data
             if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
