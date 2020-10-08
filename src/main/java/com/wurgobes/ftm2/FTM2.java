@@ -129,6 +129,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     private int type = 0;
 
+    private ImagePlus CurrentWindow;
+
 
 
     FTM2(int t) {
@@ -402,7 +404,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 imageData = ImageJFunctions.wrapReal(temp_img);
 
                 //Display the selected images to show they were loaded
-                ImageJFunctions.show(imageData);
+                CurrentWindow = ImageJFunctions.show(imageData);
 
                 //Calculate the total amount of slices
                 total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
@@ -459,7 +461,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //Wrap the ImagePlus in an imglib2 Img object for faster processing
             //This is a reference and not a copy
             imageData = ImageJFunctions.wrapReal(imp);
-
+            CurrentWindow = imp;
             //Get some information about the file
             //We do not obtain width and height since these arent needed
             total_disk_size = (long) imp.getSizeInBytes();
@@ -627,8 +629,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             TemporalMedian.main(imageData, window);
 
             //This is just to refresh the image
-            IJ.setSlice(2);
-            IJ.setSlice(1);
+            CurrentWindow.close();
+            ImageJFunctions.show(imageData);
 
             //Run the contrast command to readjust the min and max
             IJ.run("Enhance Contrast", "saturated=0.0");
