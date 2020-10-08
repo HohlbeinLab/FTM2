@@ -54,11 +54,11 @@ public class TemporalMedian {
 					setPriority(Thread.MAX_PRIORITY);
 				}
 				public void run() {
-
                     RandomAccess<T> front = ranked.randomAccess();
                     RandomAccess<T> back = img.randomAccess();
 
                     MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
+
                     for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
                         final int[] pos = { j % imgw, j / imgw, 0 };
                         front.setPosition(pos);
@@ -79,7 +79,7 @@ public class TemporalMedian {
                         final int zSize = (int)img.dimension(2);
                         final int zSteps = zSize - window;
                         for (int i = 0; i <  zSteps; ++i) {
-                            median.add((short) front.get().getRealFloat());
+                            median.add((int) front.get().getRealFloat());
                             front.fwd(2);
                             final T t = back.get();
                             t.setReal(Math.max(t.getRealFloat() - rankmap.fromRanked(median.get()), 0));
@@ -93,6 +93,7 @@ public class TemporalMedian {
                             back.fwd(2);
                         }
                     }
+
 				}
 			}; //end of thread creation
 		}
@@ -173,11 +174,6 @@ public class TemporalMedian {
 
         public <T extends RealType< T >> void toRanked(final T in, final UnsignedIntType out) {
             out.setReal(inputToRanked[(int) in.getRealFloat()]);
-
-        }
-
-        public < T extends RealType< T >>  void fromRanked(final T in, final UnsignedIntType out) {
-            out.setReal(rankedToInput[(int) in.getRealFloat()]);
         }
 
     }
