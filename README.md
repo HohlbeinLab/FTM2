@@ -8,7 +8,7 @@ Once downloaded it can be installed by launching ImageJ > Plugins > Install... S
 The plugin should then show up at the bottom of the Plugins menu under "Faster Temporal Median".  
 
 Current Version: 0.9.4
-Download (Here)[https://github.com/HohlbeinLab/FTM2/releases]
+Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)
 ## Purpose
 This plugin takes the median over time of i.e. 50 pixels, taken from 50 frames at the same position, and subtracts that from the pixel in the middle, moving the window along with the pixel.  
 This corrects for pixel specific noise in a sensor and allows for clean-up of super resolution data since generally little data is present per frame.  
