@@ -5,7 +5,7 @@ Based on the Fast Temporal Median Filter for ImageJ by the Netherlands Cancer In
 It implementes the Mao-Hsiung Hung algorithm.
 Calculating the median from the ranked data, and processing each pixel in parallel. 
 The filter is intended for pre-processing of single molecule localization data.
-v2.3
+v1.0
 
 Used articles:
 Mao-Hsiung Hung et al. A Fast Algorithm of Temporal Median Filter for Background Subtraction
@@ -67,6 +67,7 @@ public class TemporalMedian {
                     }
 
                     MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank(), StartingValues);
+
                     int temp_median = rankmap.fromRanked(median.get());
                     // write current median for windowC+1 pixels
                     for (int i = 0; i <=  windowC; ++i) {

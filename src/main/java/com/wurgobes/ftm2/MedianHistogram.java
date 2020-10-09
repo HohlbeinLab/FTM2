@@ -1,9 +1,11 @@
 package com.wurgobes.ftm2;
-/* Median finding histogram 
-(c) 2019 Rolf Harkes, Netherlands Cancer Institute.
-Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
+/* Median Finding Algorithm
+(c) 2020 Martijn Gobes, Holhbein Lab, Wageningen University
+Based on the Fast Temporal Median Filter for ImageJ by the Netherlands Cancer Institute.
 This class would run on every pixel in an image and is therefore kept minimal.
-The medianFindingHistogram is created once and then updated with new values.
+
+This algorithm is based on:
+Mao-Hsiung Hung et al. A Fast Algorithm of Temporal Median Filter for Background Subtraction
 
 Known limitations for increased speed
 * only odd windows where the median is the center value
@@ -28,13 +30,7 @@ SOFTWARE.
  */
 
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 public class MedianHistogram {
-    private final int window;
 
     private final int[] hist; //Gray-level histogram init at 0
 
@@ -54,16 +50,12 @@ public class MedianHistogram {
     private final int[] lookup_ub = {0,  0, -1, 0, 0, -1, 1, 1, 0};
 
 
-
-
     public MedianHistogram(int window, int maxVal, int[] StartingValues) {
-        this.window = window;
         this.maxVal = maxVal;
 
         //0 indexed sorted array has median at this position.
         windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
         hist = new int[maxVal + 1]; //Gray-level histogram init at 0
-
 
         for (int val: StartingValues) {
             hist[val]++;
