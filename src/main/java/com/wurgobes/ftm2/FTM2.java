@@ -266,7 +266,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
             if(type == 0 | type == 1) gd.addButton("Select Files", fs); //Custom button that allows for creating and deleting a list of files
             if(type == 0 | type == 1) gd.addButton("Clear Selected Files", fs);
-            if(type == 3) gd.addMessage("Will use already opened file:" + imp.getTitle());
+            if(type == 3) gd.addMessage("Will use already opened file: " + imp.getTitle());
 
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
@@ -309,11 +309,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             IJ.error("Error: No source directory was provided.");
             return DONE;
         }
-        //We want to save to a target directory, but none was provided = error
-        if (target_dir.equals("") && save_data) {
-            IJ.error("Error: No output directory was provided.");
-            return DONE;
-        }
+
 
         //If it contains backwards slashes, replace them with forward ones
         if(!pre_loaded_image && selected_files == null){
@@ -444,7 +440,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                         total_size += vstacks.get(Stack_no).size();
                         Stack_no++;
 
-                        System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no).size() + " slices as virtual stack");
+                        System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no - 1).size() + " slices as virtual stack");
                     }
                 }
                 //Even if you don't want to save, if the file is too large, it will have to happen
@@ -492,6 +488,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
         if(window > total_size) window = total_size; //If the window is set to above the total size, set it to the total size
         if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
+
+        //We want to save to a target directory, but none was provided = error
+        if (target_dir.equals("") && save_data) {
+            IJ.error("Error: No output directory was provided.");
+            return DONE;
+        }
 
         //Since save data might be changed, we only edit the path here
         if(save_data){
@@ -645,7 +647,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         }
 
-
         //Print some extra information about how long everything took and the processing speed
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
@@ -653,17 +654,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         System.out.println("Script took " + String.format("%.3f", spendTime) + " s");
         if(savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
-
-
-        // 03/10
-        // deprecated gpu implementation
-        // 728.586s (12m) on HDD on 25GB file 34.9 MB/s
-        // 120s (2m) on HDD on 4GB
-        // 7.764s on 1.5k large frame 32b 184.2 MB/s
-        // 7.275s on 1.5k large frame normal 102.3 MB/s
-        // 1.453s on 20k normal 108.8 MB/s
-        // 0.144s on 400 normal 20.9 MB/s
-
     }
 
 
@@ -680,13 +670,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     //Only used when debugging from an IDE
     public static void main(String[] args) {
-
         ImageJ ij_instance = new ImageJ();
-        //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif");
-        //imp.show();
-        IJ.runPlugIn(FTM2.class.getName(), "");
-
-	
+        ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
+        imp.show();
+        IJ.runPlugIn(FTM2_select_files.class.getName(), "");
     }
 
 

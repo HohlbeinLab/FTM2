@@ -1,14 +1,14 @@
 package com.wurgobes.ftm2;
-/* Fast Temporal Median filter
-(c) 2017 Rolf Harkes and Bram van den Broek, Netherlands Cancer Institute.
-Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab.
-It implementes the T.S.Huang algorithm in a maven .jar for easy deployment in Fiji (ImageJ2)
+/* Faster Temporal Median filter
+(c) 2020 Martijn Gobes, Holhbein Lab, Wageningen University
+Based on the Fast Temporal Median Filter for ImageJ by the Netherlands Cancer Institute.
+It implementes the Mao-Hsiung Hung algorithm.
 Calculating the median from the ranked data, and processing each pixel in parallel. 
 The filter is intended for pre-processing of single molecule localization data.
 v2.3
 
 Used articles:
-T.S.Huang et al. 1979 - Original algorithm for median calculation
+Mao-Hsiung Hung et al. A Fast Algorithm of Temporal Median Filter for Background Subtraction
 
 This software is released under the GPL v3. You may copy, distribute and modify 
 the software as long as you track changes/dates in source files. Any 
@@ -49,53 +49,52 @@ public class TemporalMedian {
         final AtomicInteger ai = new AtomicInteger(0); //special unique int for each thread
 		final Thread[] threads = newThreadArray(); //all threads
 		for (int ithread = 0; ithread < threads.length; ithread++) {
-			threads[ithread] = new Thread() { //make threads
-				{
-					setPriority(Thread.MAX_PRIORITY);
-				}
-				public void run() {
-                    RandomAccess<T> front = ranked.randomAccess();
-                    RandomAccess<T> back = img.randomAccess();
+            //make threads
+            threads[ithread] = new Thread(() -> {
+                RandomAccess<T> front = ranked.randomAccess();
+                RandomAccess<T> back = img.randomAccess();
 
-                    MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
+                for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
+                    final int[] pos = { j % imgw, j / imgw, 0 };
+                    front.setPosition(pos);
+                    back.setPosition(pos);
 
-                    for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
-                        final int[] pos = { j % imgw, j / imgw, 0 };
-                        front.setPosition(pos);
-                        back.setPosition(pos);
-
-                        // read the first window ranked pixels into median filter
-                        for (int i = 0; i <  window; ++i) {
-                            median.add((int) front.get().getRealFloat());
-                            front.fwd(2);
-                        }
-                        // write current median for windowC+1 pixels
-                        for (int i = 0; i <=  windowC; ++i) {
-                            final T t = back.get();
-                            t.setReal(Math.max(t.getRealFloat() - rankmap.fromRanked(median.get()), 0));
-                            back.fwd(2);
-                        }
-
-                        final int zSize = (int)img.dimension(2);
-                        final int zSteps = zSize - window;
-                        for (int i = 0; i <  zSteps; ++i) {
-                            median.add((int) front.get().getRealFloat());
-                            front.fwd(2);
-                            final T t = back.get();
-                            t.setReal(Math.max(t.getRealFloat() - rankmap.fromRanked(median.get()), 0));
-                            back.fwd(2);
-                        }
-
-                        // write current median for windowC pixels
-                        for (int i = 0; i < windowC; ++i) {
-                            final T t = back.get();
-                            t.setReal(Math.max((int) t.getRealFloat() - rankmap.fromRanked(median.get()), 0));
-                            back.fwd(2);
-                        }
+                    // read the first window ranked pixels into median filter
+                    int[] StartingValues = new int[window];
+                    for (int i = 0; i <  window; ++i) {
+                        StartingValues[i] = (int) front.get().getRealFloat();
+                        front.fwd(2);
                     }
 
-				}
-			}; //end of thread creation
+                    MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank(), StartingValues);
+                    int temp_median = rankmap.fromRanked(median.get());
+                    // write current median for windowC+1 pixels
+                    for (int i = 0; i <=  windowC; ++i) {
+                        final T t = back.get();
+                        t.setReal(Math.max(t.getRealFloat() - temp_median, 0));
+                        back.fwd(2);
+                    }
+
+                    final int zSize = (int)img.dimension(2);
+                    final int zSteps = zSize - window;
+                    for (int i = 0; i <  zSteps; ++i) {
+                        median.add_new((int) front.get().getRealFloat());
+                        front.fwd(2);
+                        final T t = back.get();
+                        t.setReal(Math.max(t.getRealFloat() - rankmap.fromRanked(median.get()), 0));
+                        back.fwd(2);
+                    }
+
+                    temp_median = rankmap.fromRanked(median.get());
+                    // write current median for windowC pixels
+                    for (int i = 0; i < windowC; ++i) {
+                        final T t = back.get();
+                        t.setReal(Math.max((int) t.getRealFloat() - temp_median, 0));
+                        back.fwd(2);
+                    }
+                }
+
+            }); //end of thread creation
 		}
 
 		startAndJoin(threads);
@@ -121,8 +120,6 @@ public class TemporalMedian {
 
     static  class RankMap
     {
-
-
         private final int[] inputToRanked;
         private final int[] rankedToInput;
         private static int maxRank;
@@ -138,7 +135,7 @@ public class TemporalMedian {
             final int U8_SIZE = 256;
             final int U16_SIZE = 65536;
 
-            int mapSize = 0;
+            int mapSize;
             if (input.firstElement().getBitsPerPixel() == 8) {
                 mapSize = U8_SIZE;
             } else {
