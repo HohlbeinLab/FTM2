@@ -13,6 +13,7 @@ The variables that can be set are:<br>
 *End - Till which frame the plugin should run. When set to 0, it will process all frames<br>
 *Window - The window of which the median will be taken<br>
 <br>
+*New Method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 *Save Data - If the produced data should be saved to disk. If checked a target directory must be provided<br>
 *Note that datasets larger than available RAM will always be saved. You can increase available RAM by going to Edit > Options > Memory & Threads<br>
 <br>
@@ -37,6 +38,7 @@ This option will be slightly faster, as the loading of data is already done.<br>
 This plugin can also be run from the macro.<br>
 An example: `run("Select Files and Run", "source=your_data target=your_folder start=1 end=0 window=50 save_data=0")`<br>
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.<br>
+For true/false values, 0 or 1 could also be used.<br>
 The keywords available are:<br>
 *source - The path to the folder from which to process files<br>
 *target - The path to which the processed data is to be saved<br>
@@ -44,7 +46,8 @@ The keywords available are:<br>
 *start - From which frame the plugin should start (default: 1)<br>
 *end - Till which frame the plugin should run. When set to 0, it will process all frames (default: all frames)<br>
 *window - The window of which the median will be taken (default: 50)<br>
-*save_data - If the produced data should be saved to disk. If set the target keyword must also be included. (default: 0)<br>
+*save_data - If the produced data should be saved to disk. If set the target keyword must also be included. (default: false)<br>
+*new_method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 <br>
 Note that to run at least either a `source` or a `file` argument must be provided.<br>
 An example macro file is also provided<br>

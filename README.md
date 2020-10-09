@@ -7,6 +7,8 @@ The JAR file can be found in the releases or in the target folder.
 Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
 The plugin should then show up at the bottom of the Plugins menu under "Faster Temporal Median".  
 
+Current Version: 0.9.4
+Download (Here)[https://github.com/HohlbeinLab/FTM2/releases]
 ## Purpose
 This plugin takes the median over time of i.e. 50 pixels, taken from 50 frames at the same position, and subtracts that from the pixel in the middle, moving the window along with the pixel.  
 This corrects for pixel specific noise in a sensor and allows for clean-up of super resolution data since generally little data is present per frame.  
@@ -24,6 +26,7 @@ The variables that can be set are:
 * End - Till which frame the plugin should run. When set to 0, it will process all frames  
 * Window - The window of which the median will be taken   
 
+* New Method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 * Save Data - If the produced data should be saved to disk. If checked a target directory must be provided  
 * Note that datasets larger than available RAM will always be saved. You can increase available RAM by going to Edit > Options > Memory & Threads  
 
@@ -56,6 +59,6 @@ The keywords available are:
 * end - Till which frame the plugin should run. When set to 0, it will process all frames (default: all frames)
 * window - The window of which the median will be taken (default: 50)
 * save_data - If the produced data should be saved to disk. If set the target keyword must also be included. (default: 0)
-
+* new_method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 Note that to run at least either a `source` or a `file` argument must be provided.  
 An example macro file is also provided

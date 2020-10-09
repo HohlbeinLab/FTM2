@@ -31,10 +31,14 @@ import net.imglib2.converter.Converters;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedIntType;
 
+import static java.util.Arrays.sort;
+
 public class TemporalMedian {
+    public static  < T extends RealType< T >>  void main(RandomAccessibleInterval<T> img, int window){
+        main(img,  window, false);
+    }
 
-
-    public static  < T extends RealType< T >>  void main(RandomAccessibleInterval<T> img, int window) {
+    public static  < T extends RealType< T >>  void main(RandomAccessibleInterval<T> img, int window, boolean newMethod) {
 		final int windowC = (window - 1) / 2;
 		final int imgw = (int) img.dimension(0);
         final int imgh = (int) img.dimension(1);
@@ -51,10 +55,15 @@ public class TemporalMedian {
 		for (int ithread = 0; ithread < threads.length; ithread++) {
             //make threads
             threads[ithread] = new Thread(() -> {
+
+
                 RandomAccess<T> front = ranked.randomAccess();
                 RandomAccess<T> back = img.randomAccess();
 
                 for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
+                    MedianHistogram median = null;
+                    if(!newMethod) median = new MedianHistogram(window, rankmap.getMaxRank(), newMethod);
+
                     final int[] pos = { j % imgw, j / imgw, 0 };
                     front.setPosition(pos);
                     back.setPosition(pos);
@@ -62,11 +71,12 @@ public class TemporalMedian {
                     // read the first window ranked pixels into median filter
                     int[] StartingValues = new int[window];
                     for (int i = 0; i <  window; ++i) {
-                        StartingValues[i] = (int) front.get().getRealFloat();
+                        if(newMethod) StartingValues[i] = (int) front.get().getRealFloat();
+                        else median.add((int) front.get().getRealFloat());
                         front.fwd(2);
                     }
 
-                    MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank(), StartingValues);
+                    if(newMethod) median = new MedianHistogram(window, rankmap.getMaxRank(), StartingValues, newMethod);
 
                     int temp_median = rankmap.fromRanked(median.get());
                     // write current median for windowC+1 pixels

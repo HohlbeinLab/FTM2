@@ -37,8 +37,6 @@ SOFTWARE.
 
 import fiji.util.gui.GenericDialogPlus;
 import ij.*;
-import ij.gui.DialogListener;
-import ij.gui.GenericDialog;
 import ij.io.Opener;
 import ij.plugin.*;
 import ij.plugin.filter.ExtendedPlugInFilter;
@@ -56,7 +54,7 @@ import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
 
-import java.awt.*;
+
 import java.awt.event.ActionEvent;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -127,14 +125,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     private Img<T> imageData;
 
-    private int type = 0;
+    private final int type;
 
     private ImagePlus CurrentWindow;
+    private boolean newMethod = false;
 
 
 
     FTM2(int t) {
-        type = t;
+        this.type = t;
     }
 
 
@@ -205,7 +204,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         arg = Macro.getOptions();
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
-            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data"};
+            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "new_method"};
             for(String a : arguments) {
                 if (a.contains("=")) {
                     String[] keyword_val = a.split("=");
@@ -230,6 +229,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                                 break;
                             case "save_data":
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "new_method":
+                                newMethod = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             default:
                                 System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
@@ -271,7 +273,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
-
+            gd.addCheckbox("Use new method?", newMethod);
+            gd.addToSameRow();
+            gd.addMessage("This uses a slightly different implementation of the median finding algorithm that could be faster depending on your application.");
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
@@ -295,6 +299,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             end = (int)gd.getNextNumber();
             //pre_loaded_image = gd.getNextBoolean();
             pre_loaded_image = type == 3;
+            newMethod = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
             target_dir = gd.getNextString();
         }
@@ -586,7 +591,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 //Process the data with the defined window
                 //This happens in place
-                TemporalMedian.main(temp_imglib, window);
+                TemporalMedian.main(temp_imglib, window, newMethod);
 
                 //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
                 ImageStack final_stack = new ImageStack(slice_width, slice_height);
@@ -628,7 +633,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             }
 
             //Then process the data, either on the smaller view or the entire dataset
-            TemporalMedian.main(imageData, window);
+            TemporalMedian.main(imageData, window, newMethod);
 
             //This is just to refresh the image
             CurrentWindow.close();
@@ -671,9 +676,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     //Only used when debugging from an IDE
     public static void main(String[] args) {
         ImageJ ij_instance = new ImageJ();
-        ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
+        //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
+        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
         imp.show();
-        IJ.runPlugIn(FTM2_select_files.class.getName(), "");
+        IJ.runPlugIn(FTM2_use_opened_image.class.getName(), "");
     }
 
 

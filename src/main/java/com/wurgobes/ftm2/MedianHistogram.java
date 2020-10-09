@@ -33,15 +33,17 @@ SOFTWARE.
 public class MedianHistogram {
 
     private final int[] hist; //Gray-level histogram init at 0
+    private final boolean newMethod;
 
     private int median;//The median of this pixel
+    private int aux;   //Marks the position of the median pixel in the column of the histogram, starting with 1
 
-
-    private final int[] history;
+    public final int[] history;
     private int hi;
 
     private final int maxVal;
 
+    private final int window;
     private final int windowC;
     private int lb;
     private int ub;
@@ -49,9 +51,28 @@ public class MedianHistogram {
     private final int[] lookup_lb = {0, -1, -1, 1, 0,  0, 1, 0, 0};
     private final int[] lookup_ub = {0,  0, -1, 0, 0, -1, 1, 1, 0};
 
-
-    public MedianHistogram(int window, int maxVal, int[] StartingValues) {
+    public MedianHistogram(int window, int maxVal, boolean newMethod) {
+        this.window = window;
         this.maxVal = maxVal;
+        this.newMethod = newMethod;
+
+        //0 indexed sorted array has median at this position.
+        windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
+        hist = new int[maxVal + 1]; //Gray-level histogram init at 0
+
+
+        hist[0] = window;
+        aux = windowC + 1;
+        median = 0;
+
+        history = new int[window];
+        hi = 0;
+    }
+
+    public MedianHistogram(int window, int maxVal, int[] StartingValues, boolean newMethod) {
+        this.maxVal = maxVal;
+        this.window = window;
+        this.newMethod = newMethod;
 
         //0 indexed sorted array has median at this position.
         windowC = (window - 1) / 2; //0 indexed sorted array has median at this position.
@@ -63,7 +84,7 @@ public class MedianHistogram {
 
         build_histogram();
 
-        history = StartingValues;
+        history = StartingValues.clone();
         hi = 0;
     }
 
@@ -79,6 +100,14 @@ public class MedianHistogram {
                     break;
                 }
             }
+        }
+    }
+
+    public void add(final int new_pixel){
+        if(newMethod){
+            add_new(new_pixel);
+        } else {
+            add_old(new_pixel);
         }
     }
 
@@ -99,10 +128,91 @@ public class MedianHistogram {
         }
     }
 
+    public void add_old(final int pixel2) {
+        final int pixel = record(pixel2);
+
+        hist[pixel]--; //Removing old pixel
+        hist[pixel2]++; //Adding new pixel
+        if (!(
+                (pixel > median && pixel2 > median)
+                        || (pixel < median && pixel2 < median)
+                        || (pixel == median && pixel2 == median)
+        )) //Add and remove the same pixel, or pixel from the same side, the median doesn't change
+        {
+            int j = median;
+            if ((pixel2 > median) && (pixel < median)) //The median goes right
+            {
+                if (hist[median] == aux) //The previous median was the last pixel of its column in the histogram, so it changes
+                {
+                    j++;
+                    while (hist[j] == 0) //Searching for the next pixel
+                    {
+                        j++;
+                    }
+                    median = j;
+                    aux = 1; //The median is the first pixel of its column
+                } else {
+                    aux++; //The previous median wasn't the last pixel of its column, so it doesn't change, just need to mark its new position
+                }
+            } else if ((pixel > median) && (pixel2 < median)) //The median goes left
+            {
+                if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                {
+                    j--;
+                    while (hist[j] == 0) //Searching for the next pixel
+                    {
+                        j--;
+                    }
+                    median = j;
+                    aux = hist[j]; //The median is the last pixel of its column
+                } else {
+                    aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
+                }
+            } else if (pixel2 == median) //new pixel = last median
+            {
+                if (pixel < median) //old pixel < last median, the median goes right
+                {
+                    aux++; //There is at least one pixel above the last median (the one that was just added), so the median doesn't change, just need to mark its new position
+                }                                //else, absolutely nothing changes
+            } else //pixel==median, old pixel = last median
+            {
+                if (pixel2 > median) //new pixel > last median, the median goes right
+                {
+                    if (aux == (hist[median] + 1)) //The previous median was the last pixel of its column, so it changes
+                    {
+                        j++;
+                        while (hist[j] == 0) //Searching for the next pixel
+                        {
+                            j++;
+                        }
+                        median = j;
+                        aux = 1; //The median is the first pixel of its column
+                    }
+                    //else, absolutely nothing changes
+                } else //pixel2<median, new pixel < last median, the median goes left
+                {
+                    if (aux == 1) //The previous median was the first pixel of its column in the histogram, so it changes
+                    {
+                        j--;
+                        while (hist[j] == 0) //Searching for the next pixel
+                        {
+                            j--;
+                        }
+                        median = j;
+                        aux = hist[j]; //The median is the last pixel of its column
+                    } else {
+                        aux--; //The previous median wasn't the first pixel of its column, so it doesn't change, just need to mark its new position
+                    }
+                }
+            }
+        }
+    }
+
     private int record(int value) {
         final int old = history[hi];
         history[hi] = value;
-        hi = ++hi % 50;
+        if (++hi >= window)
+            hi = 0;
         return old;
     }
 
