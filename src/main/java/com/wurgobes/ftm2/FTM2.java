@@ -4,7 +4,6 @@ package com.wurgobes.ftm2;
 Based on the Fast Temporal Median Filter for ImageJ by the Milstein Lab
 and the Fast Temporal Median Filter by Rolf Harkes and Bram van den Broek at the Netherlands Cancer Institutes.
 
-
 Calculating the median from the ranked data, and processing each pixel in parallel.
 The filter is intended for pre-processing of single molecule localization data.
 v0.9
@@ -14,10 +13,8 @@ The CPU implementation is based on the T.S. Huang method for fast median calcula
 Currently only supports tif files
 Currently supports 8, 16, and 32 bit CPU processing
 
-
 Used articles:
 T.S.Huang et al. 1979 - Original algorithm for CPU implementation
-
 
 This software is released under the GPL v3. You may copy, distribute and modify
 the software as long as you track changes/dates in source files. Any
@@ -33,7 +30,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
-
 
 import fiji.util.gui.GenericDialogPlus;
 import ij.*;
@@ -62,6 +58,7 @@ import java.util.*;
 import javax.swing.*;
 import java.awt.event.ActionListener;
 
+import static java.lang.Math.abs;
 import static java.lang.Math.min;
 
 class MultiFileSelect implements ActionListener {
@@ -98,7 +95,6 @@ class MultiFileSelect implements ActionListener {
 
 
 //Settings for ImageJ, settings where it'll appear in the menu
-
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, PlugIn {
 
@@ -131,11 +127,13 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private boolean newMethod = false;
 
 
+    private static String debug_arg_string = "";
+    private static double totalTime = 0;
+
 
     FTM2(int t) {
         this.type = t;
     }
-
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
         //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not
@@ -201,7 +199,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         File[] selected_files = null;
         MultiFileSelect fs = new MultiFileSelect();
 
-        arg = Macro.getOptions();
+        if(debug_arg_string.equals("")){
+            arg = Macro.getOptions();
+        } else {
+            arg = debug_arg_string;
+        }
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
             String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "new_method"};
@@ -275,7 +277,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             gd.addNumericField("End (0 for all)", end, 0);
             gd.addCheckbox("Use new method?", newMethod);
             gd.addToSameRow();
-            gd.addMessage("This uses a slightly different implementation of the median finding algorithm that could be faster depending on your application.");
+            gd.addMessage("This uses a slightly different implementation of the median finding algorithm\nthat could be faster depending on your application.");
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
@@ -338,30 +340,37 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //If an image is not yet loaded, we should have the info required to load
         if(!pre_loaded_image){
 
-            File[] listOfFiles; //Will contain the list of File objects from either the file select or the folder select
+            File[] listOfFiles = {}; //Will contain the list of File objects from either the file select or the folder select
 
             if (selected_files == null){//Selected files will be a File[] that contains preselected files
                 listOfFiles = new File(source_dir).listFiles();
             } else if (file_string.equals("")){//File string is an object that can be passed from the command line
                 listOfFiles = selected_files;
             } else {
+
+            }
+
+
+
+            if(file_string.equals("")){
+                //Calculate the total file size of all files to be processed
+                assert listOfFiles != null;
+                for(File file: listOfFiles){
+                    total_disk_size += file.length();
+                }
+            } else {
                 try {
-                    listOfFiles = new File[]{new File(file_string)}; //Try to open the file
+                    total_disk_size = new File(file_string).length();
                 } catch (Exception e) {
                     System.out.println("Could not open: " + file_string);
                     return DONE;
                 }
+
             }
 
-            assert listOfFiles != null;
-
-            //Calculate the total file size of all files to be processed
-            for(File file: listOfFiles){
-                total_disk_size += file.length();
-            }
             //If the entire file can fit into RAM, we can skip a lot of processing
             //The ratio is to provide a buffer for extra objects
-            all_fits = total_disk_size < max_bytes / ratio;
+            all_fits = total_disk_size < (max_bytes / ratio);
 
 
             if(all_fits){ //All data can fit into memory at once
@@ -418,36 +427,48 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 slice_width = -1;
                 bit_depth = -1;
 
+                if(file_string.equals("")){
+                    int Stack_no = 0; //Keeps track of how many stacks
+                    for (int i = 0; i < listOfFiles.length; i++) {
+                        //Check if the File Object is a tif
+                        if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith(".tif")) {
+                            //Load the file into memory as a VirtualStack
+                            vstacks.add(IJ.openVirtual(listOfFiles[i].getPath()).getStack());
 
-                int Stack_no = 0; //Keeps track of how many stacks
-                for (int i = 0; i < listOfFiles.length; i++) {
-                    //Check if the File Object is a tif
-                    if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith(".tif")) {
-                        //Load the file into memory as a VirtualStack
-                        vstacks.add(IJ.openVirtual(listOfFiles[i].getPath()).getStack());
+                            //Get some information from the first stack
+                            //Once the information is set, we sanity check the data to ensure the bitdepth and resolution is the same
+                            if(bit_depth == -1){
+                                slice_height = vstacks.get(0).getHeight();
+                                slice_width = vstacks.get(0).getWidth();
+                                bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
+                            } else if ((vstacks.get(Stack_no).getHeight() - slice_height) +
+                                    (vstacks.get(Stack_no).getWidth() - slice_width) +
+                                    (vstacks.get(Stack_no).getBitDepth() - bit_depth)
+                                    != 0){
+                                IJ.error("The dimensions or bitdepth of " + listOfFiles[i].getAbsolutePath() + " did not match the values of the first file");
+                                return DONE;
+                            }
 
-                        //Get some information from the first stack
-                        //Once the information is set, we sanity check the data to ensure the bitdepth and resolution is the same
-                        if(bit_depth == -1){
-                            slice_height = vstacks.get(0).getHeight();
-                            slice_width = vstacks.get(0).getWidth();
-                            bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
-                        } else if ((vstacks.get(Stack_no).getHeight() - slice_height) +
-                                (vstacks.get(Stack_no).getWidth() - slice_width) +
-                                (vstacks.get(Stack_no).getBitDepth() - bit_depth)
-                                != 0){
-                            IJ.error("The dimensions or bitdepth of " + listOfFiles[i].getAbsolutePath() + " did not match the values of the first file");
-                            return DONE;
+                            //Get some information specific for each stack
+                            slice_intervals.add(vstacks.get(Stack_no).size() + total_size);
+                            total_size += vstacks.get(Stack_no).size();
+                            Stack_no++;
+
+                            System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no - 1).size() + " slices as virtual stack");
                         }
-
-                        //Get some information specific for each stack
-                        slice_intervals.add(vstacks.get(Stack_no).size() + total_size);
-                        total_size += vstacks.get(Stack_no).size();
-                        Stack_no++;
-
-                        System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no - 1).size() + " slices as virtual stack");
                     }
+                } else {
+                    vstacks.add(IJ.openVirtual(file_string).getStack());
+                    slice_height = vstacks.get(0).getHeight();
+                    slice_width = vstacks.get(0).getWidth();
+                    bit_depth = vstacks.get(0).getBitDepth();
+
+                    slice_intervals.add(vstacks.get(0).size() + total_size);
+                    total_size += vstacks.get(0).size();
+
+                    System.out.println(file_string+ ", " + vstacks.get(0).size() + " slices as virtual stack");
                 }
+
                 //Even if you don't want to save, if the file is too large, it will have to happen
                 if(!all_fits && !save_data) {
                     IJ.showMessage("File is too large to not be cached to disk.");
@@ -462,6 +483,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //Wrap the ImagePlus in an imglib2 Img object for faster processing
             //This is a reference and not a copy
             imageData = ImageJFunctions.wrapReal(imp);
+
             CurrentWindow = imp;
             //Get some information about the file
             //We do not obtain width and height since these arent needed
@@ -492,7 +514,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         if(end == 0) end = total_size; //If the end var is 0, it means process all slices
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
         if(window > total_size) window = total_size; //If the window is set to above the total size, set it to the total size
-        if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
+        //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
+        if(abs(imageData.firstElement().getRealFloat())%1.0> 0.0) IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
 
         //We want to save to a target directory, but none was provided = error
         if (target_dir.equals("") && save_data) {
@@ -536,14 +559,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         long startTime = System.nanoTime();
         long savingTime = 0;
 
-
         if(!all_fits) {
-
             //Calculate the slice size in bytes and with that, the amount of slices that can be loaded at once with some buffer
             //Window slices are subtracted because these are added on to the start and end of each bracket for overlap
             int slice_size = (slice_height * slice_width * bit_depth)/8;
             int slices_that_fit = min(min((int)(max_bytes/slice_size/ratio), end), total_size) - window;
-
 
             ArrayList<int[]> brackets  = new ArrayList<>(); //Will contain the brackets of slices that will beloaded
 
@@ -618,10 +638,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //This is not able to be done in a single window afaik
             //The contrast command is to ensure the visualisation is correct since the min and max changed.
             for(int k = 0; k < brackets.size(); k++) {
-                IJ.openVirtual(target_dir + "\\part" + k + ".tif").show();
+                IJ.openVirtual(target_dir + "\\part_" + (k + 1)+ ".tif").show();
                 IJ.run("Enhance Contrast", "saturated=0.0");
             }
-
 
         } else {
             RandomAccessibleInterval<T> data;
@@ -633,29 +652,28 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             }
 
             //Then process the data, either on the smaller view or the entire dataset
-            TemporalMedian.main(imageData, window, newMethod);
+            TemporalMedian.main(data, window, newMethod);
 
             //This is just to refresh the image
+
             CurrentWindow.close();
-            ImageJFunctions.show(imageData);
+            ImageJFunctions.show(data);
 
             //Run the contrast command to readjust the min and max
             IJ.run("Enhance Contrast", "saturated=0.0");
-
 
             //If needed try to save the data
             if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
             }
-
-
         }
 
         //Print some extra information about how long everything took and the processing speed
         long stopTime = System.nanoTime() - startTime;
         double spendTime = (double)stopTime/1000000000;
         double savedTime = (double)savingTime/1000000000;
+        totalTime += spendTime - savedTime;
         System.out.println("Script took " + String.format("%.3f", spendTime) + " s");
         if(savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
@@ -669,18 +687,30 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     }
 
     @Override
-    public void setNPasses(int i) {
-
-    }
+    public void setNPasses(int i) { }
 
     //Only used when debugging from an IDE
     public static void main(String[] args) {
         ImageJ ij_instance = new ImageJ();
         //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
-        ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
-        imp.show();
-        IJ.runPlugIn(FTM2_use_opened_image.class.getName(), "");
+
+        //imp.show();
+        String target_folder = "F:\\ThesisData\\output";
+        debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
+        float runs = 100;
+
+        for(int i = 0; i < runs; i++){
+            System.out.println("Run:" + (i+1));
+            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
+            imp.show();
+            IJ.runPlugIn(FTM2_use_opened_image.class.getName(), "");
+            WindowManager.closeAllWindows();
+            for(File file: new File(target_folder).listFiles())
+                if (!file.isDirectory())
+                    file.delete();
+            System.gc();
+        }
+        System.out.println("Average runtime " + String.format("%.3f", totalTime/runs) + " s");
     }
-
-
 }

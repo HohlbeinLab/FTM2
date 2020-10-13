@@ -38,7 +38,6 @@ This option will be slightly faster, as the loading of data is already done.<br>
 This plugin can also be run from the macro.<br>
 An example: `run("Select Files and Run", "source=your_data target=your_folder start=1 end=0 window=50 save_data=0")`<br>
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.<br>
-For true/false values, 0 or 1 could also be used.<br>
 The keywords available are:<br>
 *source - The path to the folder from which to process files<br>
 *target - The path to which the processed data is to be saved<br>
