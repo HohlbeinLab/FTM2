@@ -59,6 +59,5 @@ The keywords available are:
 * end - Till which frame the plugin should run. When set to 0, it will process all frames (default: all frames)
 * window - The window of which the median will be taken (default: 50)
 * save_data - If the produced data should be saved to disk. If set the target keyword must also be included. (default: 0)
-* new_method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 Note that to run at least either a `source` or a `file` argument must be provided.  
 An example macro file is also provided

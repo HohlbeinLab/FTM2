@@ -124,7 +124,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private final int type;
 
     private ImagePlus CurrentWindow;
-    private boolean newMethod = false;
 
 
     private static String debug_arg_string = "";
@@ -206,7 +205,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         }
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
-            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "new_method"};
+            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data"};
             for(String a : arguments) {
                 if (a.contains("=")) {
                     String[] keyword_val = a.split("=");
@@ -231,9 +230,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                                 break;
                             case "save_data":
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
-                                break;
-                            case "new_method":
-                                newMethod = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             default:
                                 System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
@@ -275,7 +271,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
-            gd.addCheckbox("Use new method?", newMethod);
             gd.addToSameRow();
             gd.addMessage("This uses a slightly different implementation of the median finding algorithm\nthat could be faster depending on your application.");
             gd.addCheckbox("Save Image?", save_data);
@@ -301,7 +296,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             end = (int)gd.getNextNumber();
             //pre_loaded_image = gd.getNextBoolean();
             pre_loaded_image = type == 3;
-            newMethod = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
             target_dir = gd.getNextString();
         }
@@ -515,7 +509,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
         if(window > total_size) window = total_size; //If the window is set to above the total size, set it to the total size
         //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
-        if(abs(imageData.firstElement().getRealFloat())%1.0> 0.0) IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+        if (all_fits && abs(imageData.firstElement().getRealFloat())%1.0> 0.0) IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
 
         //We want to save to a target directory, but none was provided = error
         if (target_dir.equals("") && save_data) {
@@ -556,8 +550,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     @Override
     public void run(ImageProcessor ip) {
         //Set some variables to measure how long the entire script, and how long just saving takes
-        long startTime = System.nanoTime();
+
         long savingTime = 0;
+        long stopTime = 0;
+        long startTime = System.nanoTime();
 
         if(!all_fits) {
             //Calculate the slice size in bytes and with that, the amount of slices that can be loaded at once with some buffer
@@ -611,7 +607,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 //Process the data with the defined window
                 //This happens in place
-                TemporalMedian.main(temp_imglib, window, newMethod);
+                long intertime = System.nanoTime();
+                TemporalMedian.main(temp_imglib, window, bit_depth);
+                stopTime += (System.nanoTime() - intertime);
 
                 //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
                 ImageStack final_stack = new ImageStack(slice_width, slice_height);
@@ -624,7 +622,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 //Try to save the file and record how long this takes
                 //If it fails, error
                 //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
-                long intertime = System.nanoTime();
+                intertime = System.nanoTime();
                 if(!saveImagePlus(target_dir + "\\part_" + (k + 1)+ ".tif", new ImagePlus("", final_stack))){
                     IJ.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1)+ ".tif") + "\\Median_corrected.tif");
                     System.exit(0);
@@ -645,15 +643,16 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         } else {
             RandomAccessibleInterval<T> data;
             if(start != 1 | end != total_size) {
+
                 //Get a reference for only the data if the start and end don't equal the whole file
                 data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
             } else {
                 data = imageData;
             }
-
+            long interTime = System.nanoTime();
             //Then process the data, either on the smaller view or the entire dataset
-            TemporalMedian.main(data, window, newMethod);
-
+            TemporalMedian.main(data, window, bit_depth);
+            stopTime = System.nanoTime() - interTime;
             //This is just to refresh the image
 
             CurrentWindow.close();
@@ -668,13 +667,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 System.exit(0);
             }
         }
-
+        startTime = System.nanoTime() - startTime;
         //Print some extra information about how long everything took and the processing speed
-        long stopTime = System.nanoTime() - startTime;
+
         double spendTime = (double)stopTime/1000000000;
         double savedTime = (double)savingTime/1000000000;
-        totalTime += spendTime - savedTime;
-        System.out.println("Script took " + String.format("%.3f", spendTime) + " s");
+        double allTime = (double)startTime/1000000000;
+        totalTime += spendTime;
+        System.out.println("Total took " + String.format("%.3f", allTime) + " s");
+        System.out.println("Processing took " + String.format("%.3f", spendTime) + " s");
         if(savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
         System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
     }
@@ -696,15 +697,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         //imp.show();
         String target_folder = "F:\\ThesisData\\output";
-        debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
+        //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         float runs = 100;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
+            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
             imp.show();
-            IJ.runPlugIn(FTM2_use_opened_image.class.getName(), "");
+            IJ.runPlugIn(FTM2_select_files.class.getName(), "");
             WindowManager.closeAllWindows();
             for(File file: new File(target_folder).listFiles())
                 if (!file.isDirectory())
