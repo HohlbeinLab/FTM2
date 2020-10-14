@@ -5,7 +5,7 @@ A rewritten version of the Fast Temporal Median Filter, enabling extra features 
 
 The JAR file can be found in the releases or in the target folder.  
 Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
-The plugin should then show up at the bottom of the Plugins menu under "Faster Temporal Median".  
+The plugin should then show up in the Plugins menu under "Faster Temporal Median".  
 
 Current Version: 0.9.5
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)
