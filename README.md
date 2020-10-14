@@ -10,7 +10,7 @@ The plugin should then show up at the bottom of the Plugins menu under "Faster T
 Current Version: 0.9.5
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)
 ## Purpose
-This plugin takes the median over time of i.e. 50 pixels, taken from 50 frames at the same position, and subtracts that from the pixel in the middle, moving the window along with the pixel.  
+This plugin takes the median over time of e.g. 50 pixels on consecutive frames, taken from 50 frames at the same coordinate, and subtracts that from the pixel in the middle, moving the window along with the pixel.  
 This corrects for pixel specific noise in a sensor and allows for clean-up of super resolution data since generally little data is present per frame.  
 The window should be chosen in such a way that signal occupies less than half of the window in that pixel.  
 
@@ -23,12 +23,14 @@ All selected files are concatenated in alphabetical order.
 
 The variables that can be set are:  
 * Start - From which frame the plugin should start  
-* End - Till which frame the plugin should run. When set to 0, it will process all frames  
+* End - Till which frame the plugin should run. When set to 0, it will process till the last frame.
 * Window - The window of which the median will be taken   
 
 * New Method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 * Save Data - If the produced data should be saved to disk. If checked a target directory must be provided  
-* Note that datasets larger than available RAM will always be saved. You can increase available RAM by going to Edit > Options > Memory & Threads  
+    Note that the program does not know the size of the files. If files are selected that do not fit in RAM
+    it will have to save them.
+    You can increase available RAM by going to Edit > Options > Memory & Threads  
 
 There are three options in the Plugins > Faster Temporal Median menu.  
 They all use the same back-end, but allow you to select files in different ways.  
@@ -44,12 +46,12 @@ With this option you can select a folder from which to run all files.
 Any subfolders or non-tif files are ignored in this.  
 
 ### Use Opened Image and Run
-With this option the selected, the selected image is used for processing.  
+With this option the selected image is used for processing.  
 This option will be slightly faster, as the loading of data is already done.  
 
 ## Running from a Macro
-This plugin can also be run from the macro.  
-An example: `run("Select Files and Run", "source=your_data target=your_folder start=1 end=0 window=50 save_data=0")`  
+This plugin can also be run from a macro.  
+An example: `run("Select Files and Run", "source=C:\C:\Users\Your_Name\your_folder\image_file.tif target=your_folder start=1 end=0 window=50 save_data=0")`  
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.  
 The keywords available are:  
 * source - The path to the folder from which to process files

@@ -15,7 +15,10 @@ The variables that can be set are:<br>
 <br>
 *New Method - Uses a slightly newer method for determining the median which might be faster depending on your application (default: false)<br>
 *Save Data - If the produced data should be saved to disk. If checked a target directory must be provided<br>
-*Note that datasets larger than available RAM will always be saved. You can increase available RAM by going to Edit > Options > Memory & Threads<br>
+* Save Data - If the produced data should be saved to disk. If checked a target directory must be provided<br>
+    Note that the program does not know the size of the files. If files are selected that do not fit in RAM<br>
+    it will have to save them.<br>
+    You can increase available RAM by going to Edit > Options > Memory & Threads<br>
 <br>
 There are three options in the Plugins > Faster Temporal Median menu.<br>
 They all use the same back-end, but allow you to select files in different ways.<br>
@@ -35,8 +38,8 @@ With this option the selected, the selected image is used for processing.<br>
 This option will be slightly faster, as the loading of data is already done.<br>
 <br>
 ## Running from a Macro<br>
-This plugin can also be run from the macro.<br>
-An example: `run("Select Files and Run", "source=your_data target=your_folder start=1 end=0 window=50 save_data=0")`<br>
+This plugin can also be run from a macro.<br>
+An example: `run("Select Files and Run", "source=C:\C:\Users\Your_Name\your_folder\image_file.tif target=your_folder start=1 end=0 window=50 save_data=0")`<br>
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.<br>
 The keywords available are:<br>
 *source - The path to the folder from which to process files<br>
