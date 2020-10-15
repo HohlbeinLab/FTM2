@@ -2,13 +2,16 @@
 A rewritten version of the Fast Temporal Median Filter, enabling extra features like more bit-depth support and larger-than-ram datasets, as well as being slightly faster than previous versions.
 
 ## Installation
-
-The JAR file can be found in the releases or in the target folder.  
-Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
-The plugin should then show up in the Plugins menu under "Faster Temporal Median".  
+One can get the Plugin by using the download link below, or by subscribing to the Hohlbein lab update site.
+You can subscribe by going to Help > Update... > Manage Update Sites and checking the Hohlbein lab site.
+It will automatically be downlaoded and updated.
 
 Current Version: 0.9.5
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)
+Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
+The plugin should then show up in the Plugins menu under "Faster Temporal Median".  
+
+
 ## Purpose
 This plugin takes the median over time of e.g. 50 pixels on consecutive frames, taken from 50 frames at the same coordinate, and subtracts that from the pixel in the middle, moving the window along with the pixel.  
 This corrects for pixel specific noise in a sensor and allows for clean-up of super resolution data since generally little data is present per frame.  
