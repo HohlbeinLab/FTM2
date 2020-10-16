@@ -608,7 +608,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 //Process the data with the defined window
                 //This happens in place
                 long intertime = System.nanoTime();
-                TemporalMedian.main(temp_imglib, window, bit_depth);
+                TemporalMedian.main(temp_imglib, window, bit_depth, 0);
                 stopTime += (System.nanoTime() - intertime);
 
                 //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
@@ -642,16 +642,18 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         } else {
             RandomAccessibleInterval<T> data;
-            if(start != 1 | end != total_size) {
-
+            if(start > 1 | end < total_size) {
                 //Get a reference for only the data if the start and end don't equal the whole file
-                data = Views.offsetInterval(imageData, new long[] {0, 0, start - 1}, new long[] {imageData.dimension(0), imageData.dimension(1) , end});
+                data = Views.interval(imageData, new long[] {0, 0, start }, new long[] {imageData.dimension(0) - 1, imageData.dimension(1) - 1, end - 1});
             } else {
                 data = imageData;
             }
+
+
+
             long interTime = System.nanoTime();
             //Then process the data, either on the smaller view or the entire dataset
-            TemporalMedian.main(data, window, bit_depth);
+            TemporalMedian.main(data, window, bit_depth, start - 1);
             stopTime = System.nanoTime() - interTime;
             //This is just to refresh the image
 
@@ -667,8 +669,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 System.exit(0);
             }
         }
+
+        IJ.showStatus("Finished Processing!");
+
         startTime = System.nanoTime() - startTime;
         //Print some extra information about how long everything took and the processing speed
+
 
         double spendTime = (double)stopTime/1000000000;
         double savedTime = (double)savingTime/1000000000;
@@ -698,15 +704,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //imp.show();
         String target_folder = "F:\\ThesisData\\output";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
-        float runs = 100;
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
+        float runs = 1;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
+            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif");
             imp.show();
             IJ.runPlugIn(FTM2_select_files.class.getName(), "");
-            WindowManager.closeAllWindows();
+            //WindowManager.closeAllWindows();
             for(File file: new File(target_folder).listFiles())
                 if (!file.isDirectory())
                     file.delete();
