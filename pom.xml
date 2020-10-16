@@ -33,6 +33,18 @@
 		</license>
 	</licenses>
 
+	<contributors>
+		<contributor>
+			<name>Martijn Gobes</name>
+			<email>martijn.gobes@wur.nl</email>
+			<organization>WUR</organization>
+			<organizationUrl>https://www.wur.nl/</organizationUrl>
+			<roles>
+				<role>developer</role>
+			</roles>
+		</contributor>
+	</contributors>
+
 	<developers>
 		<developer>
 			<id>mgobes</id>
