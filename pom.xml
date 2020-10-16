@@ -18,8 +18,8 @@
 	<version>0.9-SNAPSHOT</version>
 
 
-	<name>Fast Median Temporal 2</name>
-	<description>A Fast Median Temporal Filter using the GPU</description>
+	<name>Faster Median Temporal</name>
+	<description>A Faster Median Temporal Filter</description>
 	<url>https://github.com/HohlbeinLab/FTM2</url>
 	<inceptionYear>2020</inceptionYear>
 	<organization>
