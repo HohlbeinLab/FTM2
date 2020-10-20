@@ -26,19 +26,13 @@ SOFTWARE.
  */
 
 
-
-
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
-
-
 import net.imglib2.*;
 
 import net.imglib2.converter.Converters;
-
 
 import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
@@ -46,11 +40,9 @@ import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedIntType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
-
 import static ij.util.ThreadUtil.createThreadArray;
 import static ij.util.ThreadUtil.startAndJoin;
 import static java.lang.Math.min;
-
 
 public class TemporalMedian {
 
@@ -62,7 +54,6 @@ public class TemporalMedian {
         final int pixels = imgw * imgh; // Total amount of pixels
         final int zSize = (int) img.dimension(2);
         final int zSteps = zSize - window;
-
 
         final RandomAccessibleInterval<U> int_img = (RandomAccessibleInterval<U>) img;
 
@@ -142,8 +133,6 @@ public class TemporalMedian {
         startAndJoin(threads);
 	}
 
-
-
     static class  RankMap
     {
         // Two arrays that keep references to each others indices
@@ -173,7 +162,6 @@ public class TemporalMedian {
 
             final int mapSize;
 
-
             final boolean[] inihist;
 
             // Set mapSize to what bit-depth you have
@@ -181,13 +169,6 @@ public class TemporalMedian {
                 mapSize = U8_SIZE;
 
             } else if (input.firstElement().getBitsPerPixel() == 32) {
-
-                // This method only supports integer values
-                // 32b images can be float however
-                // this creates a mapping from the original values between 0 and U32_SIZE
-                // This loses image precision, but how much depends on the range of values in input
-                // I recommend converting it to 32b Integers to prevent this loss
-
                 mapSize = min((int) computeMinMax(input.iterator()) + 1, U32_SIZE + 1);
 
             } else {

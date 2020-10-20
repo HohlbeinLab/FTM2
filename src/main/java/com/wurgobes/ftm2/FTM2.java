@@ -230,6 +230,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                                 break;
                             case "file":
                                 file_string = keyword_val[1];
+                                break;
                             case "target":
                                 target_dir = keyword_val[1];
                                 break;
@@ -262,6 +263,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 System.out.println("Argument string must contain source or file variables.");
                 return DONE;
             }
+
             if (save_data  && target_dir.equals("")) {
                 System.out.println("When saving is enabled, a target directory must be provided");
                 return DONE;
@@ -527,6 +529,12 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             if (all_fits && abs(imageData.firstElement().getRealFloat())%1.0> 0.0) {
                 IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
 
+                // This method only supports integer values
+                // 32b images can be float however
+                // this creates a mapping from the original values between 0 and U32_SIZE
+                // This loses image precision, but how much depends on the range of values in input
+                // I recommend converting it to 32b or 16b Integers to prevent this loss
+
                 double[] result = computeMinMax(imageData.iterator());
                 final double temp_min = result[0];
                 final double temp_max = min(result[1], 4_000_000.0);
@@ -535,13 +543,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 imageData.forEach(t -> t.setReal(((t.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
             }
-
+            //Get an ops context
             Context context = new Context(OpService.class);
             OpService ops = context.getService(OpService.class);
 
+            //Convert the image to unsigned ints for further processing
+            //This doesnt change the data, just changes the container type.
+            //This step does not cause precision loss
             imageData = (Img<T>) ops.convert().uint32(imageData);
-
-
         }
 
 
@@ -695,6 +704,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             CurrentWindow.close();
 
             if(bit_depth == 32) {
+                //ImageJ doesnt want to display 32b int data, so i have to cast it to 32b float.
+                //this technically leads to precision loss, but this is unlikely as the values would have to be >U32_SIZE
+                // which i prevent.
+                //This is not an issue with saving
+
                 ImageJFunctions.wrapFloat(data, "").show();
             } else {
                 ImageJFunctions.show(data);
@@ -749,7 +763,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true";
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
@@ -757,7 +771,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
 
-        int runs = 100;
+        int runs = 1;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
