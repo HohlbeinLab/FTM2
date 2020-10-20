@@ -25,47 +25,63 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
+
+
+
+
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
+
+
 import net.imglib2.*;
+
 import net.imglib2.converter.Converters;
 
+
+import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedIntType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
+
 import static ij.util.ThreadUtil.createThreadArray;
 import static ij.util.ThreadUtil.startAndJoin;
-import static java.lang.Math.abs;
+import static java.lang.Math.min;
 
 
 public class TemporalMedian {
+
     @SuppressWarnings("unchecked")
-    public static  < T extends RealType< T >>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset) {
+    public static  < T extends RealType< T >, U extends IntegerType<U>>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset) {
 		final int windowC = window / 2; //This is the Index of the median
 		final int imgw = (int) img.dimension(0); // width of frame
         final int imgh = (int) img.dimension(1); // height of frame
         final int pixels = imgw * imgh; // Total amount of pixels
+        final int zSize = (int) img.dimension(2);
+        final int zSteps = zSize - window;
+
+
+        final RandomAccessibleInterval<U> int_img = (RandomAccessibleInterval<U>) img;
 
         // Build the rankmap from the image and use that to convert the original image
         // This compacts the image and reduces the memory footprint required.
         // This effectively removes all zero values from the histogram
+        final RankMap rankmap = RankMap.build((IterableInterval<U>) int_img);
+        final RandomAccessibleInterval<U> ranked;
 
-        final RankMap rankmap = RankMap.build((IterableInterval<T>) img);
-        final RandomAccessibleInterval<T> ranked;
 
         switch(bit_depth){
             case 16:
-                ranked = (RandomAccessibleInterval<T>) Converters.convert(img, rankmap::toRanked, new UnsignedShortType());
+                ranked = (RandomAccessibleInterval<U>) Converters.convert( int_img, rankmap::toRanked, new UnsignedShortType());
                 break;
             case 8:
-                ranked = (RandomAccessibleInterval<T>) Converters.convert(img, rankmap::toRanked, new UnsignedByteType());
+                ranked = (RandomAccessibleInterval<U>) Converters.convert( int_img, rankmap::toRanked, new UnsignedByteType());
                 break;
             default:
-                ranked = (RandomAccessibleInterval<T>) Converters.convert(img, rankmap::toRanked, new UnsignedIntType());
+                ranked = (RandomAccessibleInterval<U>) Converters.convert(int_img, rankmap::toRanked, new UnsignedIntType());
         }
 
 
@@ -76,8 +92,8 @@ public class TemporalMedian {
             threads[ithread] = new Thread(() -> {
 
                 // Get the RandomAccess, twice for the same image
-                RandomAccess<T> front = ranked.randomAccess(); // front is used to read new values
-                RandomAccess<T> back = img.randomAccess(); // back is used to set the median corrected values
+                RandomAccess<U> front = ranked.randomAccess(); // front is used to read new values
+                RandomAccess<U> back = (RandomAccess<U>) img.randomAccess(); // back is used to set the median corrected values
                 MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
                 for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
 
@@ -89,34 +105,32 @@ public class TemporalMedian {
 
                     for (int i = 0; i <  window; ++i) {
                         // Get the next value and add it to the median object or the startingvalues
-                        median.add((int) front.get().getRealFloat());
+                        median.add(front.get().getInteger());
                         front.fwd(2); // Move the front one forward in the 2nd dimension to the next slice
                     }
 
-
-                    int temp_median = rankmap.fromRanked((int) median.get()); // The median won't change so we read it once
+                    int temp_median = rankmap.fromRanked(median.get()); // The median won't change so we read it once
                     // write current median for windowC+1 pixels
                     for (int i = 0; i <  windowC; ++i) {
-                        final T t = back.get(); // Get the reference to the back's pixel
-                        t.setReal(Math.max(t.getRealFloat() - temp_median, 0)); // Set the back's value, median adjusted
+                        final U t = back.get(); // Get the reference to the back's pixel
+                        t.setInteger(Math.max(t.getInteger() - temp_median, 0)); // Set the back's value, median adjusted
                         back.fwd(2); // Move the back one forward in the 2nd dimension to the next slice
                     }
 
-                    final int zSize = (int)img.dimension(2);
-                    final int zSteps = zSize - window;
+
                     for (int i = 0; i <  zSteps; ++i) {
                         median.add((int) front.get().getRealFloat());
                         front.fwd(2); // Move the front one forward in the 2nd dimension to the next slice
-                        final T t = back.get(); // Get the reference to the back's pixel
-                        t.setReal(Math.max(t.getRealFloat() - rankmap.fromRanked( median.get()), 0)); // Set the back's value, median adjusted
+                        final U t = back.get(); // Get the reference to the back's pixel
+                        t.setInteger(Math.max(t.getInteger() - rankmap.fromRanked( median.get()), 0)); // Set the back's value, median adjusted
                         back.fwd(2); // Move the front one forward in the 2nd dimension to the next slice
                     }
 
-                    temp_median = rankmap.fromRanked((int) median.get());
+                    temp_median = rankmap.fromRanked(median.get());
                     // write current median for windowC pixels
                     for (int i = 0; i < windowC; ++i) {
-                        final T t = back.get(); // Get the reference to the back's pixel
-                        t.setReal(Math.max((int) t.getRealFloat() - temp_median, 0)); // Set the back's value, median adjusted
+                        final U t = back.get(); // Get the reference to the back's pixel
+                        t.setInteger(Math.max(t.getInteger() - temp_median, 0)); // Set the back's value, median adjusted
                         back.fwd(2); // Move the back one forward in the 2nd dimension to the next slice
                     }
 
@@ -127,6 +141,8 @@ public class TemporalMedian {
 		// Start actual processing
         startAndJoin(threads);
 	}
+
+
 
     static class  RankMap
     {
@@ -148,7 +164,7 @@ public class TemporalMedian {
 
         // This is the real constructor
         // It is only called once per thread
-        public static <T extends RealType<T>> RankMap build(final IterableInterval<T> input)
+        public static < U extends IntegerType<U>>  RankMap build(final IterableInterval<U> input)
         {
             // this denotes the maximum unique values
             // It will never be this high, but better be safe
@@ -157,8 +173,6 @@ public class TemporalMedian {
 
             final int mapSize;
 
-            final double temp_min;
-            final double temp_max;
 
             final boolean[] inihist;
 
@@ -166,8 +180,6 @@ public class TemporalMedian {
             if (input.firstElement().getBitsPerPixel() == 8) {
                 mapSize = U8_SIZE;
 
-                inihist= new boolean[mapSize];
-                input.forEach(t -> inihist[(int) t.getRealFloat()] = true);
             } else if (input.firstElement().getBitsPerPixel() == 32) {
 
                 // This method only supports integer values
@@ -176,41 +188,13 @@ public class TemporalMedian {
                 // This loses image precision, but how much depends on the range of values in input
                 // I recommend converting it to 32b Integers to prevent this loss
 
-                double[] result = computeMinMax(input.iterator());
-                temp_min = result[0];
-                temp_max = result[1];
+                mapSize = min((int) computeMinMax(input.iterator()) + 1, U32_SIZE + 1);
 
-               if(abs(input.firstElement().getRealFloat())%1.0 > 0.0) {
-                    input.forEach(t -> t.setReal(((t.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
-                    mapSize = U32_SIZE + 1;
-                    inihist= new boolean[mapSize];
-                    input.forEach(t -> inihist[(int) t.getRealFloat()] = true);
-               } else {
-                   mapSize = (int) temp_max + 1;
-                   inihist= new boolean[mapSize];
-                   input.forEach(t -> inihist[(int) ((t.getRealFloat() - temp_min) * (temp_max) / (temp_max - temp_min))] = true);
-               }
             } else {
                 mapSize = U16_SIZE;
-
-
-                inihist= new boolean[mapSize];
-                input.forEach(t -> inihist[(int) t.getRealFloat()] = true);
             }
-
-
-
-
-/*
-            if (input.firstElement().getBitsPerPixel() == 32){
-                //For each value, mark the inihist index true
-                input.forEach(t -> inihist[(int) ((t.getRealFloat() - temp_min) * (temp_max) / (temp_max - temp_min))] = true);
-            } else {
-                //For each value, mark the inihist index true
-                input.forEach(t -> inihist[(int) t.getRealFloat()] = true);
-            }
-
- */
+            inihist= new boolean[mapSize];
+            input.forEach(t -> inihist[t.getInteger()] = true);
 
 
             final int[] inputToRanked = new int[ mapSize ];
@@ -228,19 +212,16 @@ public class TemporalMedian {
                 }
             }
 
-
             maxRank = r - 1;
 
             return new RankMap(inputToRanked, rankedToInput);
         }
 
-        private static <T extends RealType< T >> double[] computeMinMax(Iterator<T> iterator) {
-            DoubleAccumulator min = new DoubleAccumulator(Double::min, Double.POSITIVE_INFINITY);
+        private static < U extends IntegerType<U>> double computeMinMax(Iterator<U> iterator) {
             DoubleAccumulator max = new DoubleAccumulator(Double::max, Double.NEGATIVE_INFINITY);
 
-            iterator.forEachRemaining(t -> {max.accumulate(t.getRealDouble()); min.accumulate(t.getRealDouble());});
-
-            return new double[]{min.get(), max.get()};
+            iterator.forEachRemaining(t -> max.accumulate(t.getInteger()));
+            return max.get();
         }
 
         public int fromRanked(final int in) {
@@ -252,21 +233,19 @@ public class TemporalMedian {
         }
 
 
-        public <T extends RealType< T >> void toRanked(final T in, final UnsignedIntType out) {
-            out.setReal(inputToRanked[(int) in.getRealFloat()]);
+        public <U extends IntegerType<U>> void toRanked(final U in, final UnsignedIntType out) {
+            out.setInteger(inputToRanked[in.getInteger()]);
         }
 
-        public <T extends RealType< T >> void toRanked(final T in, final UnsignedShortType out) {
-            out.setReal(inputToRanked[(int) in.getRealFloat()]);
+        public <U extends IntegerType<U>> void toRanked(final U in, final UnsignedShortType out) {
+            out.setInteger(inputToRanked[in.getInteger()]);
         }
 
-        public <T extends RealType< T >> void toRanked(final T in, final UnsignedByteType out) {
-            out.setReal(inputToRanked[(int) in.getRealFloat()]);
+        public <U extends IntegerType<U>> void toRanked(final U in, final UnsignedByteType out) {
+            out.setInteger(inputToRanked[in.getInteger()]);
         }
+
 
 
     }
-
-
-
 }

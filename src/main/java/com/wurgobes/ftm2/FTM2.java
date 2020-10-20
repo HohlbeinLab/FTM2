@@ -32,6 +32,7 @@ SOFTWARE.
  */
 
 import fiji.util.gui.GenericDialogPlus;
+
 import ij.*;
 import ij.io.Opener;
 import ij.plugin.*;
@@ -42,6 +43,8 @@ import ij.io.FileSaver;
 import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
+import net.imagej.ops.OpService;
+
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
@@ -49,6 +52,7 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
+import org.scijava.Context;
 
 
 import java.awt.event.ActionEvent;
@@ -57,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import javax.swing.*;
 import java.awt.event.ActionListener;
+import java.util.concurrent.atomic.DoubleAccumulator;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.min;
@@ -173,6 +178,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             e.printStackTrace();
         }
         return result.toString();
+    }
+
+    private static <T extends RealType< T >> double[] computeMinMax(Iterator<T> iterator) {
+        DoubleAccumulator min = new DoubleAccumulator(Double::min, Double.POSITIVE_INFINITY);
+        DoubleAccumulator max = new DoubleAccumulator(Double::max, Double.NEGATIVE_INFINITY);
+
+        iterator.forEachRemaining(t -> {max.accumulate(t.getRealDouble()); min.accumulate(t.getRealDouble());});
+
+        return new double[]{min.get(), max.get()};
     }
 
     /*
@@ -340,8 +354,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 listOfFiles = new File(source_dir).listFiles();
             } else if (file_string.equals("")){//File string is an object that can be passed from the command line
                 listOfFiles = selected_files;
-            } else {
-
             }
 
 
@@ -509,7 +521,29 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
         if(window > total_size) window = total_size; //If the window is set to above the total size, set it to the total size
         //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
-        if (all_fits && abs(imageData.firstElement().getRealFloat())%1.0> 0.0) IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+
+
+        if(imageData.firstElement().getBitsPerPixel() ==  32) {
+            if (all_fits && abs(imageData.firstElement().getRealFloat())%1.0> 0.0) {
+                IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+
+                double[] result = computeMinMax(imageData.iterator());
+                final double temp_min = result[0];
+                final double temp_max = min(result[1], 4_000_000.0);
+                final double U32_SIZE = 4_000_000.0;
+
+
+                imageData.forEach(t -> t.setReal(((t.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
+            }
+
+            Context context = new Context(OpService.class);
+            OpService ops = context.getService(OpService.class);
+
+            imageData = (Img<T>) ops.convert().uint32(imageData);
+
+
+        }
+
 
         //We want to save to a target directory, but none was provided = error
         if (target_dir.equals("") && save_data) {
@@ -650,15 +684,24 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             }
 
 
-
             long interTime = System.nanoTime();
             //Then process the data, either on the smaller view or the entire dataset
+
             TemporalMedian.main(data, window, bit_depth, start - 1);
+
             stopTime = System.nanoTime() - interTime;
             //This is just to refresh the image
 
             CurrentWindow.close();
-            ImageJFunctions.show(data);
+
+            if(bit_depth == 32) {
+                ImageJFunctions.wrapFloat(data, "").show();
+            } else {
+                ImageJFunctions.show(data);
+            }
+
+
+
 
             //Run the contrast command to readjust the min and max
             IJ.run("Enhance Contrast", "saturated=0.0");
@@ -698,26 +741,35 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     //Only used when debugging from an IDE
     public static void main(String[] args) {
-        ImageJ ij_instance = new ImageJ();
+        new ImageJ();
         //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
 
         //imp.show();
         String target_folder = "F:\\ThesisData\\output";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
-        float runs = 1;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif";
+
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
+
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
+        //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
+
+        int runs = 100;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif");
+            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif");
             imp.show();
             IJ.runPlugIn(FTM2_select_files.class.getName(), "");
-            //WindowManager.closeAllWindows();
+            WindowManager.closeAllWindows();
             for(File file: new File(target_folder).listFiles())
                 if (!file.isDirectory())
                     file.delete();
             System.gc();
         }
-        System.out.println("Average runtime " + String.format("%.3f", totalTime/runs) + " s");
+        System.out.println("Average runtime " + String.format("%.3f", totalTime/(float) runs) + " s");
     }
 }

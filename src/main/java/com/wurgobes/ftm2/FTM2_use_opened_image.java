@@ -1,10 +1,11 @@
 package com.wurgobes.ftm2;
 
 import ij.plugin.PlugIn;
+import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
 
 
-public class FTM2_use_opened_image< T extends RealType< T >>  implements PlugIn {
+public class FTM2_use_opened_image< T extends RealType< T >> implements PlugIn {
 
     @Override
     public void run(String arg) {
