@@ -45,14 +45,17 @@ import ij.gui.YesNoCancelDialog;
 
 import net.imagej.ops.OpService;
 
+import net.imglib2.IterableInterval;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.img.imageplus.ImagePlusImg;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
 import org.scijava.Context;
+import org.scijava.plugin.Parameter;
 
 
 import java.awt.event.ActionEvent;
@@ -101,6 +104,7 @@ class MultiFileSelect implements ActionListener {
 
 //Settings for ImageJ, settings where it'll appear in the menu
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
+@SuppressWarnings("unchecked")
 public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, PlugIn {
 
     public static int window = 50;
@@ -120,7 +124,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private int slice_height;
     private int slice_width;
     private int bit_depth;
-    private final double ratio = 1.3;
+    private double ratio = 1.3;
 
     private boolean save_data = false;
 
@@ -130,6 +134,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     private ImagePlus CurrentWindow;
 
+    final double U32_SIZE = 16_777_216.0;
+
+    //This might be required to convert 32b data
+    final OpService ops = new Context(OpService.class).getService(OpService.class);
 
     private static String debug_arg_string = "";
     private static double totalTime = 0;
@@ -377,7 +385,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //If the entire file can fit into RAM, we can skip a lot of processing
             //The ratio is to provide a buffer for extra objects
             all_fits = total_disk_size < (max_bytes / ratio);
-
+            all_fits = false;
 
             if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
@@ -424,6 +432,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 //Calculate the total amount of slices
                 total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
+
+                //Get bits per pixel
+                bit_depth = imageData.firstElement().getBitsPerPixel();
 
                 System.out.println("Loaded opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
             }  else { //All the data does not fit into memory
@@ -510,12 +521,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         //Ensure the bitdepth is byte aligned. If no bitdepth is found, set it to 16.
         //Above 32 is not supported
-        if (bit_depth == 0) bit_depth = 16;
-        else if (bit_depth <= 8) bit_depth = 8;
-        else if (bit_depth <= 16) bit_depth = 16;
-        else if (bit_depth <= 32) bit_depth = 32;
+        if (bit_depth == 0) {bit_depth = 16;}
+        else if (bit_depth <= 8) {bit_depth = 8;}
+        else if (bit_depth <= 16) {bit_depth = 16;}
+        else if (bit_depth <= 32) {bit_depth = 32; ratio = 4;}
         else IJ.error("Bitdepth not Supported");
-
 
         if(end == 0) end = total_size; //If the end var is 0, it means process all slices
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
@@ -523,9 +533,17 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
 
 
-        if(imageData.firstElement().getBitsPerPixel() ==  32) {
-            if (all_fits && abs(imageData.firstElement().getRealFloat())%1.0> 0.0) {
-                IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+        if(bit_depth == 32 && all_fits) {
+            double[] result = computeMinMax(imageData.iterator());
+
+            final double temp_min = result[0];
+            final double temp_max = min(result[1], U32_SIZE);
+
+            if ((abs(imageData.firstElement().getRealFloat())%1.0> 0.0 |result[1] > U32_SIZE )) {
+                if(abs(imageData.firstElement().getRealFloat())%1.0> 0.0)
+                    IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+                else
+                    IJ.showStatus("An image with 32b values above 16.777.216.0 was deteced.\nThis range is not fully.\nThis might lead to data precision loss");
 
                 // This method only supports integer values
                 // 32b images can be float however
@@ -533,22 +551,18 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 // This loses image precision, but how much depends on the range of values in input
                 // I recommend converting it to 32b or 16b Integers to prevent this loss
 
-                double[] result = computeMinMax(imageData.iterator());
-                final double temp_min = result[0];
-                final double temp_max = min(result[1], 4_000_000.0);
-                final double U32_SIZE = 4_000_000.0;
-
 
                 imageData.forEach(t -> t.setReal(((t.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
             }
-            //Get an ops context
-            Context context = new Context(OpService.class);
-            OpService ops = context.getService(OpService.class);
+
 
             //Convert the image to unsigned ints for further processing
             //This doesnt change the data, just changes the container type.
             //This step does not cause precision loss
+
             imageData = (Img<T>) ops.convert().uint32(imageData);
+
+
         }
 
 
@@ -600,7 +614,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //Calculate the slice size in bytes and with that, the amount of slices that can be loaded at once with some buffer
             //Window slices are subtracted because these are added on to the start and end of each bracket for overlap
             int slice_size = (slice_height * slice_width * bit_depth)/8;
-            int slices_that_fit = min(min((int)(max_bytes/slice_size/ratio), end), total_size) - window;
+            int slices_that_fit = min((int)(max_bytes/slice_size/ratio) - window, total_size);
+
+
 
             ArrayList<int[]> brackets  = new ArrayList<>(); //Will contain the brackets of slices that will beloaded
 
@@ -609,9 +625,21 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             int lower_end = start;
             while(slices_left > 0){
                 slices_left -= slices_that_fit;
-                brackets.add(new int[]{lower_end, min(slices_that_fit + lower_end, end)});
+
+                // If the leftover frames are lower than window, it wont calculate properly
+                // So we add those frames to the rest
+                // This could be an issue on extremely small ram sizes < 300 MB orso
+                if(slices_left < window){
+                    slices_left = 0;
+                    brackets.add(new int[]{lower_end, end});
+                } else {
+                    brackets.add(new int[]{lower_end, min(slices_that_fit + lower_end, end)});
+                }
                 lower_end = min(slices_that_fit + lower_end, end);
             }
+
+
+
 
             ImageStack temp_stack; //Onto this stack the slices will be put before being processed
             for(int k = 0; k < brackets.size(); k++) {
@@ -635,28 +663,59 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                     if(i > slice_intervals.get(temp_index)){
                         temp_prev_sizes += vstacks.get(temp_index).size();
                         temp_index++;
+
+
                     }
                     temp_stack.addSlice("" + i, vstacks.get(temp_index).getProcessor(i - temp_prev_sizes));
                 }
 
                 System.out.println("Loaded from slice " +  s + " till slice " + e);
 
+                long intertime = System.nanoTime();
+
                 //Wrap the temp_stack into an imageplus and then an Img Object
                 //This creates references, not copies
                 ImagePlus temp_imp = new ImagePlus("", temp_stack);
                 Img<T> temp_imglib = ImageJFunctions.wrapReal(temp_imp);
 
+                //We need to do this check
+                if (bit_depth == 32){
+                    double[] result = computeMinMax(temp_imglib.iterator());
+
+                    final double temp_min = result[0];
+                    final double temp_max = min(result[1], U32_SIZE);
+
+                    if (abs(temp_imglib.firstElement().getRealFloat()) % 1.0 > 0.0 | result[1] > U32_SIZE) {
+                        temp_imglib.forEach(pixel -> pixel.setReal(((pixel.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
+                    }
+
+                    temp_imglib = (Img<T>) ops.convert().uint32(temp_imglib);
+                    temp_imp.close();
+
+                    System.gc();
+                }
+
                 //Process the data with the defined window
                 //This happens in place
-                long intertime = System.nanoTime();
                 TemporalMedian.main(temp_imglib, window, bit_depth, 0);
                 stopTime += (System.nanoTime() - intertime);
+
+
+                if(bit_depth == 32){
+
+                    temp_stack = ImageJFunctions.wrapFloat(temp_imglib, "Result").getStack();
+
+                    System.gc();
+                }
 
                 //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
                 ImageStack final_stack = new ImageStack(slice_width, slice_height);
 
                 //Create a reference in the final_stack for all the frames we want(t[0] to t[1]), unless it is the start or end.
-                for(int j = t[0] == start ? 1 : window/2 + 1; j <= (t[1] == end ? temp_stack.size() : temp_stack.size() - window/2 - 1); j++){
+                final int starting_value = t[0] == start ? 1 : window/2 + 1;
+                final int ending_value = (t[1] == end ? temp_stack.size() : temp_stack.size() - window/2 - 1);
+
+                for(int j = starting_value; j <= ending_value; j++){
                     final_stack.addSlice(temp_stack.getProcessor(j));
                 }
 
@@ -664,7 +723,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 //If it fails, error
                 //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
                 intertime = System.nanoTime();
-                if(!saveImagePlus(target_dir + "\\part_" + (k + 1)+ ".tif", new ImagePlus("", final_stack))){
+                if(!saveImagePlus(target_dir + "/part_" + (k + 1)+ ".tif", new ImagePlus("", final_stack))){
                     IJ.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1)+ ".tif") + "\\Median_corrected.tif");
                     System.exit(0);
                 }
@@ -677,7 +736,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //This is not able to be done in a single window afaik
             //The contrast command is to ensure the visualisation is correct since the min and max changed.
             for(int k = 0; k < brackets.size(); k++) {
-                IJ.openVirtual(target_dir + "\\part_" + (k + 1)+ ".tif").show();
+                IJ.openVirtual(target_dir + "/part_" + (k + 1) + ".tif").show();
                 IJ.run("Enhance Contrast", "saturated=0.0");
             }
 
@@ -699,7 +758,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             stopTime = System.nanoTime() - interTime;
             //This is just to refresh the image
 
-            CurrentWindow.close();
 
             if(bit_depth == 32) {
                 //ImageJ doesnt want to display 32b int data, so i have to cast it to 32b float.
@@ -707,9 +765,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 // which i prevent.
                 //This is not an issue with saving
 
-                ImageJFunctions.wrapFloat(data, "").show();
+                CurrentWindow.close();
+
+                ImagePlus temp = ImageJFunctions.wrapFloat(data, "Result");
+                temp.setDimensions(1,temp.getStackSize(),1);
+                temp.show();
             } else {
-                ImageJFunctions.show(data);
+
+                ImageJFunctions.wrap(Views.permute( Views.addDimension(data, 0, 0), 2, 3 ), "Result" );
+
             }
 
 
@@ -759,27 +823,29 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //imp.show();
         String target_folder = "F:\\ThesisData\\output";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
+        debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true target=" + target_folder;
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
 
         int runs = 1;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
-            imp.show();
+            //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
+            //imp.show();
             IJ.runPlugIn(FTM2_select_files.class.getName(), "");
             //WindowManager.closeAllWindows();
-            for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
-                if (!file.isDirectory())
-                    file.delete();
+            //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
+            //    if (!file.isDirectory())
+            //        file.delete();
             System.gc();
         }
         System.out.println("Average runtime " + String.format("%.3f", totalTime/(float) runs) + " s");

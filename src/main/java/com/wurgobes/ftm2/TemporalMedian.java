@@ -30,30 +30,35 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
+import net.imagej.ops.OpService;
 import net.imglib2.*;
 
 import net.imglib2.converter.Converters;
 
+import net.imglib2.img.Img;
 import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedIntType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
+import org.scijava.Context;
 
 import static ij.util.ThreadUtil.createThreadArray;
 import static ij.util.ThreadUtil.startAndJoin;
+import static java.lang.Math.abs;
 import static java.lang.Math.min;
 
 public class TemporalMedian {
 
     @SuppressWarnings("unchecked")
-    public static  < T extends RealType< T >, U extends IntegerType<U>>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset) {
+    public static  < T extends RealType<T>, U extends IntegerType<U>>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset) {
 		final int windowC = window / 2; //This is the Index of the median
 		final int imgw = (int) img.dimension(0); // width of frame
         final int imgh = (int) img.dimension(1); // height of frame
         final int pixels = imgw * imgh; // Total amount of pixels
         final int zSize = (int) img.dimension(2);
         final int zSteps = zSize - window;
+
 
         final RandomAccessibleInterval<U> int_img = (RandomAccessibleInterval<U>) img;
 
@@ -75,6 +80,7 @@ public class TemporalMedian {
                 ranked = (RandomAccessibleInterval<U>) Converters.convert(int_img, rankmap::toRanked, new UnsignedIntType());
         }
 
+        System.gc();
 
         final AtomicInteger ai = new AtomicInteger(0); //Atomic Integer is a thread safe incremental integer
         final Thread[] threads = createThreadArray(); //Get maximum of threads
@@ -101,6 +107,7 @@ public class TemporalMedian {
                     }
 
                     int temp_median = rankmap.fromRanked(median.get()); // The median won't change so we read it once
+
                     // write current median for windowC+1 pixels
                     for (int i = 0; i <  windowC; ++i) {
                         final U t = back.get(); // Get the reference to the back's pixel
@@ -133,6 +140,7 @@ public class TemporalMedian {
         startAndJoin(threads);
 	}
 
+
     static class  RankMap
     {
         // Two arrays that keep references to each others indices
@@ -140,10 +148,9 @@ public class TemporalMedian {
         private final int[] inputToRanked;
         private final int[] rankedToInput;
 
-
         private static int maxRank; // Maximum value in the input
 
-        final static int U32_SIZE = 4_000_000;
+        final static int U32_SIZE = 16_777_216;
 
         // Simple Constructor for Rankmap, dont call this, but call build()
         public RankMap(final int[] inputToRanked, final int[] rankedToInput) {
