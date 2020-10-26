@@ -45,17 +45,17 @@ import ij.gui.YesNoCancelDialog;
 
 import net.imagej.ops.OpService;
 
-import net.imglib2.IterableInterval;
+
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
-import net.imglib2.img.imageplus.ImagePlusImg;
+
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
 import org.scijava.Context;
-import org.scijava.plugin.Parameter;
 
 
 import java.awt.event.ActionEvent;
@@ -134,7 +134,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
     private ImagePlus CurrentWindow;
 
-    final double U32_SIZE = 16_777_216.0;
+    private double U32_SIZE = 16_777_216.0;
 
     //This might be required to convert 32b data
     final OpService ops = new Context(OpService.class).getService(OpService.class);
@@ -227,7 +227,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         }
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
-            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data"};
+            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "range"};
             for(String a : arguments) {
                 if (a.contains("=")) {
                     String[] keyword_val = a.split("=");
@@ -253,6 +253,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                                 break;
                             case "save_data":
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "range":
+                                U32_SIZE = Integer.parseInt(keyword_val[1]);
                                 break;
                             default:
                                 System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
@@ -299,8 +302,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
             gd.addDirectoryField("Output directory", target_dir, 50);
-            gd.addHelp(content);
 
+            gd.addHelp(content);
 
 
             //Show the dialogue
@@ -458,9 +461,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                                 slice_height = vstacks.get(0).getHeight();
                                 slice_width = vstacks.get(0).getWidth();
                                 bit_depth = vstacks.get(0).getBitDepth(); // bitdepth
-                            } else if ((vstacks.get(Stack_no).getHeight() - slice_height) +
-                                    (vstacks.get(Stack_no).getWidth() - slice_width) +
-                                    (vstacks.get(Stack_no).getBitDepth() - bit_depth)
+                            } else if ((vstacks.get(Stack_no).getHeight()  - slice_height) +
+                                    (vstacks.get(Stack_no).getWidth()  - slice_width)
                                     != 0){
                                 IJ.error("The dimensions or bitdepth of " + listOfFiles[i].getAbsolutePath() + " did not match the values of the first file");
                                 return DONE;
@@ -533,7 +535,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
 
 
-        if(bit_depth == 32 && all_fits) {
+        if(all_fits && imageData.firstElement() instanceof FloatType) {
             double[] result = computeMinMax(imageData.iterator());
 
             final double temp_min = result[0];
@@ -543,7 +545,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 if(abs(imageData.firstElement().getRealFloat())%1.0> 0.0)
                     IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
                 else
-                    IJ.showStatus("An image with 32b values above 16.777.216.0 was deteced.\nThis range is not fully.\nThis might lead to data precision loss");
+                    IJ.showMessage("An image with 32b values above 16.777.216,0 was deteced.\nThis range is not fully.\nThis might lead to data precision loss");
 
                 // This method only supports integer values
                 // 32b images can be float however
@@ -561,8 +563,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //This step does not cause precision loss
 
             imageData = (Img<T>) ops.convert().uint32(imageData);
-
-
+        } else if( bit_depth == 32) {
+            IJ.showMessage("A 32b image was detected.\nIf this is a float image, it might lead to precision loss.\nIf the image contains integer values, ensure the maximum value does not exceed 6.777.216,0.");
         }
 
 
@@ -678,8 +680,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 ImagePlus temp_imp = new ImagePlus("", temp_stack);
                 Img<T> temp_imglib = ImageJFunctions.wrapReal(temp_imp);
 
-                //We need to do this check
-                if (bit_depth == 32){
+                //We need to do this check because otherwise a 32b float might sneak through
+                if (temp_imglib.firstElement() instanceof FloatType){
+
                     double[] result = computeMinMax(temp_imglib.iterator());
 
                     final double temp_min = result[0];
@@ -824,7 +827,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         String target_folder = "F:\\ThesisData\\output";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
-        debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true target=" + target_folder;
@@ -835,6 +838,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
 
+        debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
         int runs = 1;
 
         for(int i = 0; i < runs; i++){
