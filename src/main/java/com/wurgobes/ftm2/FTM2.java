@@ -388,7 +388,6 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //If the entire file can fit into RAM, we can skip a lot of processing
             //The ratio is to provide a buffer for extra objects
             all_fits = total_disk_size < (max_bytes / ratio);
-            all_fits = false;
 
             if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
