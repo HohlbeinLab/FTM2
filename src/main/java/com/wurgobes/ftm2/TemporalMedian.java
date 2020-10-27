@@ -30,22 +30,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
-import net.imagej.ops.OpService;
 import net.imglib2.*;
 
 import net.imglib2.converter.Converters;
 
-import net.imglib2.img.Img;
 import net.imglib2.type.numeric.IntegerType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedIntType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
-import org.scijava.Context;
 
 import static ij.util.ThreadUtil.createThreadArray;
 import static ij.util.ThreadUtil.startAndJoin;
-import static java.lang.Math.abs;
+
 import static java.lang.Math.min;
 
 public class TemporalMedian {
@@ -80,7 +77,6 @@ public class TemporalMedian {
                 ranked = (RandomAccessibleInterval<U>) Converters.convert(int_img, rankmap::toRanked, new UnsignedIntType());
         }
 
-        System.gc();
 
         final AtomicInteger ai = new AtomicInteger(0); //Atomic Integer is a thread safe incremental integer
         final Thread[] threads = createThreadArray(); //Get maximum of threads

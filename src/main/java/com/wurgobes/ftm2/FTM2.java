@@ -142,6 +142,8 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private static String debug_arg_string = "";
     private static double totalTime = 0;
 
+    private ImagePlus ImgPlusReference;
+
 
     FTM2(int t) {
         this.type = t;
@@ -393,7 +395,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 IJ.showStatus("Creating stacks");
 
                 //Load the images into memory as a single stack. This will work when its multiple seperate files
-                ImagePlus temp_img;
+
                 if (selected_files != null) {
                     ImagePlus[] temp_imgs = new ImagePlus[selected_files.length];
                     for(int i = 0; i < selected_files.length; i++){
@@ -405,7 +407,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                         }
                     }
                     try {
-                        temp_img = new Concatenator().concatenateHyperstacks(temp_imgs, "Concatenated", false);
+                        ImgPlusReference = new Concatenator().concatenateHyperstacks(temp_imgs, "Concatenated", false);
                     } catch (Exception e) {
                         System.out.println("One or more of your files might not have the same dimension");
                         return DONE;
@@ -414,7 +416,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                 } else if (!file_string.equals("")) {
                     //One file to open via the commandline
                     try {
-                        temp_img = new Opener().openImage(file_string);
+                        ImgPlusReference = new Opener().openImage(file_string);
                     } catch (Exception e) {
                         System.out.println("Failed to open file: " + file_string);
                         return DONE;
@@ -422,15 +424,17 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 } else {
                     //Open all files inside the provided folder
-                    temp_img = new FolderOpener().openFolder(source_dir);
+                    ImgPlusReference = new FolderOpener().openFolder(source_dir);
                 }
+
 
                 //Wrap the ImagePlus into an Img<T>
                 //This will not copy the data! Merely reference it
-                imageData = ImageJFunctions.wrapReal(temp_img);
+                imageData = ImageJFunctions.wrapReal(ImgPlusReference);
+                CurrentWindow = ImgPlusReference;
 
                 //Display the selected images to show they were loaded
-                CurrentWindow = ImageJFunctions.show(imageData);
+                ImgPlusReference.show();
 
                 //Calculate the total amount of slices
                 total_size = (int) ( imageData.size()/ imageData.dimension(0)/ imageData.dimension(1));
@@ -503,6 +507,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             imageData = ImageJFunctions.wrapReal(imp);
 
             CurrentWindow = imp;
+            ImgPlusReference = imp;
             //Get some information about the file
             //We do not obtain width and height since these arent needed
             total_disk_size = (long) imp.getSizeInBytes();
@@ -769,17 +774,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 CurrentWindow.close();
 
-                ImagePlus temp = ImageJFunctions.wrapFloat(data, "Result");
-                temp.setDimensions(1,temp.getStackSize(),1);
-                temp.show();
-            } else {
-
-                ImageJFunctions.wrap(Views.permute( Views.addDimension(data, 0, 0), 2, 3 ), "Result" );
-
+                ImgPlusReference = ImageJFunctions.wrapFloat(data, "Result");
             }
 
-
-
+            ImgPlusReference.show();
 
             //Run the contrast command to readjust the min and max
             IJ.run("Enhance Contrast", "saturated=0.0");
@@ -833,19 +831,20 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
+        //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
 
-        debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
-        int runs = 1;
+        //debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
+        int runs = 100;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif");
-            //imp.show();
+            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
+            imp.show();
             IJ.runPlugIn(FTM2_select_files.class.getName(), "");
-            //WindowManager.closeAllWindows();
+            WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
             //    if (!file.isDirectory())
             //        file.delete();
