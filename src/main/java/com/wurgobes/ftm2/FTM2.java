@@ -34,6 +34,9 @@ SOFTWARE.
 import fiji.util.gui.GenericDialogPlus;
 
 import ij.*;
+import ij.gui.ImageWindow;
+import ij.gui.Roi;
+import ij.gui.StackWindow;
 import ij.io.Opener;
 import ij.plugin.*;
 import ij.plugin.filter.ExtendedPlugInFilter;
@@ -50,9 +53,7 @@ import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 
 import net.imglib2.type.numeric.RealType;
-import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.type.numeric.real.FloatType;
-import net.imglib2.view.Views;
 
 import org.apache.commons.lang.StringUtils;
 import org.scijava.Context;
@@ -759,8 +760,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
             //this crops the image if need be
             if(start > 1 | end < total_size) {
-                ImagePlus TempReference = new SubstackMaker().makeSubstack(ImgPlusReference, start + "-" + end); //Crop the image (creates a copy)
-                TempReference.setTitle(ImgPlusReference.getTitle()); //Set the title
+                ImagePlus TempReference = new OwnSubStackMaker().stackRange(ImgPlusReference, start, end, ImgPlusReference.getTitle());
                 ImgPlusReference.close(); //Close the old one
                 ImgPlusReference = TempReference; //Re-reference the reference
             }
@@ -851,5 +851,49 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             System.gc();
         }
         System.out.println("Average runtime " + String.format("%.3f", totalTime/(float) runs) + " s");
+    }
+}
+
+// Copied from https://imagej.nih.gov/ij/developer/source/ij/plugin/SubstackMaker.java.html
+// This is done purely because the delete variable is private and set to false and is only adjustable with a gui
+class OwnSubStackMaker extends SubstackMaker {
+    public boolean delete = true;
+
+    ImagePlus stackRange(ImagePlus imp, int first, int last, String title){
+        ImageStack stack = imp.getStack();
+        ImageStack stack2 = null;
+        boolean virtualStack = stack.isVirtual();
+        double min = imp.getDisplayRangeMin();
+        double max = imp.getDisplayRangeMax();
+        Roi roi = imp.getRoi();
+        boolean showProgress = stack.size()>400 || stack.isVirtual();
+        for (int i= first, j=0; i<= last; i+= 1) {
+            if (showProgress) IJ.showProgress(i,last);
+            int currSlice = i-j;
+            ImageProcessor ip2 = stack.getProcessor(currSlice);
+            ip2.setRoi(roi);
+            ip2 = ip2.crop();
+            if (stack2==null)
+                stack2 = new ImageStack(ip2.getWidth(), ip2.getHeight());
+            stack2.addSlice(stack.getSliceLabel(currSlice), ip2);
+            if (delete) {
+                stack.deleteSlice(currSlice);
+                j++;
+            }
+        }
+        if (delete) {
+            imp.setStack(stack);
+            // next three lines for updating the scroll bar
+            ImageWindow win = imp.getWindow();
+            StackWindow swin = (StackWindow) win;
+            if (swin!=null)
+                swin.updateSliceSelector();
+        }
+        ImagePlus substack = imp.createImagePlus();
+        substack.setStack(title, stack2);
+        substack.setCalibration(imp.getCalibration());
+        if (virtualStack)
+            substack.setDisplayRange(min, max);
+        return substack;
     }
 }
