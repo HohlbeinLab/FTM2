@@ -48,12 +48,12 @@ import static java.lang.Math.min;
 public class TemporalMedian {
 
     @SuppressWarnings("unchecked")
-    public static  < T extends RealType<T>, U extends IntegerType<U>>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset) {
+    public static  < T extends RealType<T>, U extends IntegerType<U>>  void main(RandomAccessibleInterval<T> img, int window, int bit_depth, final int offset, final int end) {
 		final int windowC = window / 2; //This is the Index of the median
 		final int imgw = (int) img.dimension(0); // width of frame
         final int imgh = (int) img.dimension(1); // height of frame
         final int pixels = imgw * imgh; // Total amount of pixels
-        final int zSize = (int) img.dimension(2);
+        final int zSize = min((int) img.dimension(2), end);
         final int zSteps = zSize - window;
 
 

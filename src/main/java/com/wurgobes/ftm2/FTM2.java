@@ -704,7 +704,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 //Process the data with the defined window
                 //This happens in place
-                TemporalMedian.main(temp_imglib, window, bit_depth, 0);
+                TemporalMedian.main(temp_imglib, window, bit_depth, 0, (int) temp_imglib.dimension(2));
                 stopTime += (System.nanoTime() - intertime);
 
 
@@ -748,22 +748,22 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             }
 
         } else {
-            RandomAccessibleInterval<T> data;
-            if(start > 1 | end < total_size) {
-                //Get a reference for only the data if the start and end don't equal the whole file
-                data = Views.interval(imageData, new long[] {0, 0, start }, new long[] {imageData.dimension(0) - 1, imageData.dimension(1) - 1, end - 1});
-            } else {
-                data = imageData;
-            }
-
 
             long interTime = System.nanoTime();
             //Then process the data, either on the smaller view or the entire dataset
 
-            TemporalMedian.main(data, window, bit_depth, start - 1);
+            TemporalMedian.main(imageData, window, bit_depth, start - 1, end);
 
             stopTime = System.nanoTime() - interTime;
             //This is just to refresh the image
+
+            //this crops the image if need be
+            if(start > 1 | end < total_size) {
+                ImagePlus TempReference = new SubstackMaker().makeSubstack(ImgPlusReference, start + "-" + end); //Crop the image (creates a copy)
+                TempReference.setTitle(ImgPlusReference.getTitle()); //Set the title
+                ImgPlusReference.close(); //Close the old one
+                ImgPlusReference = TempReference; //Re-reference the reference
+            }
 
 
             if(bit_depth == 32) {
@@ -774,7 +774,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
                 CurrentWindow.close();
 
-                ImgPlusReference = ImageJFunctions.wrapFloat(data, "Result");
+                ImgPlusReference = ImageJFunctions.wrapFloat(imageData, "Result");
             }
 
             ImgPlusReference.show();
@@ -783,7 +783,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             IJ.run("Enhance Contrast", "saturated=0.0");
 
             //If needed try to save the data
-            if (save_data && !saveImagePlus(target_dir + "\\Median_corrected.tif", ImageJFunctions.wrap(data, "Median_Corrected"))){
+            if (save_data && !saveImagePlus(target_dir + "\\" + ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif", ImgPlusReference)){
                 IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                 System.exit(0);
             }
@@ -831,20 +831,20 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
 
         //debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
-        int runs = 100;
+        int runs = 1;
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
             ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
             imp.show();
             IJ.runPlugIn(FTM2_select_files.class.getName(), "");
-            WindowManager.closeAllWindows();
+            //WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
             //    if (!file.isDirectory())
             //        file.delete();
