@@ -1,0 +1,1 @@
+{"class":"com.wurgobes.ftm2.FTM2","values":{"type":"org.scijava.command.Command"}}{"class":"com.wurgobes.ftm2.FTM2_select_folder","values":{"type":"org.scijava.command.Command"}}{"class":"com.wurgobes.ftm2.FTM2_select_files","values":{"type":"org.scijava.command.Command"}}{"class":"com.wurgobes.ftm2.FTM2_use_opened_image","values":{"type":"org.scijava.command.Command"}}

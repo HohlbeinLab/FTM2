@@ -39,8 +39,7 @@ import ij.gui.Roi;
 import ij.gui.StackWindow;
 import ij.io.Opener;
 import ij.plugin.*;
-import ij.plugin.filter.ExtendedPlugInFilter;
-import ij.plugin.filter.PlugInFilterRunner;
+
 import ij.process.*;
 import ij.io.FileSaver;
 import ij.WindowManager;
@@ -55,8 +54,11 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
 
-import org.apache.commons.lang.StringUtils;
-import org.scijava.Context;
+
+import org.scijava.command.Command;
+import org.scijava.log.LogService;
+import org.scijava.plugin.Parameter;
+import org.scijava.plugin.Plugin;
 
 
 import java.awt.event.ActionEvent;
@@ -70,43 +72,13 @@ import java.util.concurrent.atomic.DoubleAccumulator;
 import static java.lang.Math.abs;
 import static java.lang.Math.min;
 
-class MultiFileSelect implements ActionListener {
-
-    File[] files = null;
-
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        if (e.getActionCommand().equals("Select Files")) {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setMultiSelectionEnabled(true);
-            chooser.showOpenDialog(new JFrame());
-            files = chooser.getSelectedFiles();
-            IJ.showMessage("You selected: " + getFileNames());
-        } else {
-            YesNoCancelDialog answer = new YesNoCancelDialog(new JFrame(), "Clear list of files", "Do you want to clear:" + getFileNames());
-            if(answer.yesPressed()) files = null;
-        }
-    }
-
-    public File[] getFiles(){
-        return files;
-    }
-
-    public String getFileNames(){
-        if(files == null) return "No files selected";
-        StringBuilder tmp = new StringBuilder();
-        for(File file: files){
-            tmp.append("\"").append(file.getName()).append("\" ");
-        }
-        return tmp.toString();
-    }
-}
 
 
 //Settings for ImageJ, settings where it'll appear in the menu
 //T extends RealType so this should support any image that implements this. 8b, 16b, 32b are confirmed to work
 @SuppressWarnings("unchecked")
-public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, PlugIn {
+@Plugin(type = Command.class)
+public class FTM2< T extends RealType< T >>  implements Command {
 
     public static int window = 50;
     public static int start = 1;
@@ -138,7 +110,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private double U32_SIZE = 16_777_216.0;
 
     //This might be required to convert 32b data
-    final OpService ops = new Context(OpService.class).getService(OpService.class);
+    //final OpService ops = new Context(OpService.class).getService(OpService.class);
+
+    private final int DONE = 0;
+
+    @Parameter
+    private OpService opService;
+
+    @Parameter
+    private LogService logService;
 
     private static String debug_arg_string = "";
     private static double totalTime = 0;
@@ -146,8 +126,10 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     private ImagePlus ImgPlusReference;
 
 
-    FTM2(int t) {
+    FTM2(int t, OpService op, LogService log) {
         this.type = t;
+        this.opService = op;
+        this.logService = log;
     }
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
@@ -163,7 +145,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         int distance = Integer.MAX_VALUE;
         String closest = null;
         for (String compareString: strings) {
-            int currentDistance = StringUtils.getLevenshteinDistance(compareString, target);
+            int currentDistance = levenshtein.calculate(compareString, target);
             if(currentDistance < distance) {
                 distance = currentDistance;
                 closest = compareString;
@@ -208,9 +190,11 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     imp will contain the already opened image, if one exists, otherwise it is null
      */
 
-    public int setup(String arg, ImagePlus imp) {
+    public int setup(ImagePlus imp) {
         //set the flag if we have an image already opened (and thus loaded)
         boolean pre_loaded_image = imp != null;
+        String arg = "";
+
         if(type == 3 && !pre_loaded_image) {
             IJ.showMessage("No opened file was found.\nPlease open a file and restart.");
             return DONE;
@@ -528,16 +512,15 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         //Ensure the bitdepth is byte aligned. If no bitdepth is found, set it to 16.
         //Above 32 is not supported
-        if (bit_depth == 0) {bit_depth = 16;}
-        else if (bit_depth <= 8) {bit_depth = 8;}
-        else if (bit_depth <= 16) {bit_depth = 16;}
+        if (bit_depth == 0) bit_depth = 16;
+        else if (bit_depth <= 8) bit_depth = 8;
+        else if (bit_depth <= 16) bit_depth = 16;
         else if (bit_depth <= 32) {bit_depth = 32; ratio = 4;}
         else IJ.error("Bitdepth not Supported");
 
         if(end == 0) end = total_size; //If the end var is 0, it means process all slices
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
         if(window > total_size) window = total_size; //If the window is set to above the total size, set it to the total size
-        //if (window % 2 == 0) window++; //The CPU algorithm does not work with even window sizes
 
 
         if(all_fits && imageData.firstElement() instanceof FloatType) {
@@ -567,7 +550,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //This doesnt change the data, just changes the container type.
             //This step does not cause precision loss
 
-            imageData = (Img<T>) ops.convert().uint32(imageData);
+            imageData = (Img<T>) opService.convert().uint32(imageData);
         } else if( bit_depth == 32) {
             IJ.showMessage("A 32b image was detected.\nIf this is a float image, it might lead to precision loss.\nIf the image contains integer values, ensure the maximum value does not exceed 6.777.216,0.");
         }
@@ -588,28 +571,30 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
         System.gc();
 
         //Since ImageJ plugins are a bit wonky, we have to tell it we do not need an image open
-        return DOES_8G + DOES_16 + DOES_32 + NO_IMAGE_REQUIRED + NO_UNDO;
+        return 1;
     }
 
     //This is the function that actually gets called by ImageJ
     //It gets the current image that is selected, and passes that on to the setup and run function
     //If DONE is returned by setup, it does not run the run function
     @Override
-    public void run(String arg){
+    public void run(){
+
+        logService.info("test");
         ImagePlus openImage = WindowManager.getCurrentImage();
         ImageProcessor Dummy = null;
         if (openImage == null){
-            if(setup(arg, null) != DONE){
+            if(setup(null) != DONE){
                 run(Dummy);
             }
         } else {
-            if(setup(arg, openImage) != DONE) {
+            if(setup(openImage) != DONE) {
                 run(openImage.getProcessor());
             }
         }
     }
 
-    @Override
+
     public void run(ImageProcessor ip) {
         //Set some variables to measure how long the entire script, and how long just saving takes
 
@@ -697,7 +682,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
                         temp_imglib.forEach(pixel -> pixel.setReal(((pixel.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
                     }
 
-                    temp_imglib = (Img<T>) ops.convert().uint32(temp_imglib);
+                    temp_imglib = (Img<T>) opService.convert().uint32(temp_imglib);
                     temp_imp.close();
 
                     System.gc();
@@ -761,6 +746,7 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
             //this crops the image if need be
             if(start > 1 | end < total_size) {
                 ImagePlus TempReference = new OwnSubStackMaker().stackRange(ImgPlusReference, start, end, ImgPlusReference.getTitle());
+                //ImagePlus test = new SubstackMaker().makeSubstack(ImgPlusReference, "delete " + start + "-" + end);
                 ImgPlusReference.close(); //Close the old one
                 ImgPlusReference = TempReference; //Re-reference the reference
             }
@@ -806,18 +792,14 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
     }
 
 
-    //Unused override functions
-    @Override
-    public int showDialog(ImagePlus imagePlus, String s, PlugInFilterRunner plugInFilterRunner) {
-        return 0;
-    }
-
-    @Override
-    public void setNPasses(int i) { }
-
     //Only used when debugging from an IDE
     public static void main(String[] args) {
-        new ImageJ();
+        net.imagej.ImageJ ij = new net.imagej.ImageJ();
+        ij.ui().showUI();
+
+
+
+
         //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
 
         //imp.show();
@@ -841,9 +823,9 @@ public class FTM2< T extends RealType< T >>  implements ExtendedPlugInFilter, Pl
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
-            imp.show();
-            IJ.runPlugIn(FTM2_select_files.class.getName(), "");
+            //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
+            //imp.show();
+            ij.command().run(FTM2_select_files.class, true);
             //WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
             //    if (!file.isDirectory())
@@ -895,5 +877,72 @@ class OwnSubStackMaker extends SubstackMaker {
         if (virtualStack)
             substack.setDisplayRange(min, max);
         return substack;
+    }
+}
+
+class levenshtein {
+
+    static int calculate(String x, String y) {
+        int[][] dp = new int[x.length() + 1][y.length() + 1];
+
+        for (int i = 0; i <= x.length(); i++) {
+            for (int j = 0; j <= y.length(); j++) {
+                if (i == 0) {
+                    dp[i][j] = j;
+                }
+                else if (j == 0) {
+                    dp[i][j] = i;
+                }
+                else {
+                    dp[i][j] = min(dp[i - 1][j - 1]
+                                    + costOfSubstitution(x.charAt(i - 1), y.charAt(j - 1)),
+                            dp[i - 1][j] + 1,
+                            dp[i][j - 1] + 1);
+                }
+            }
+        }
+
+        return dp[x.length()][y.length()];
+    }
+
+    public static int costOfSubstitution(char a, char b) {
+        return a == b ? 0 : 1;
+    }
+
+    public static int min(int... numbers) {
+        return Arrays.stream(numbers)
+                .min().orElse(Integer.MAX_VALUE);
+    }
+}
+
+class MultiFileSelect implements ActionListener {
+
+    File[] files = null;
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (e.getActionCommand().equals("Select Files")) {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setMultiSelectionEnabled(true);
+            chooser.showOpenDialog(new JFrame());
+            files = chooser.getSelectedFiles();
+            IJ.showMessage("You selected: " + getFileNames());
+        } else {
+            YesNoCancelDialog answer = new YesNoCancelDialog(new JFrame(), "Clear list of files", "Do you want to clear:" + getFileNames());
+            if(answer.yesPressed()) files = null;
+        }
+    }
+
+    public File[] getFiles(){
+        return files;
+    }
+
+    public String getFileNames(){
+        if(files == null) return "No files selected";
+        StringBuilder tmp = new StringBuilder();
+        for(File file: files){
+            tmp.append("\"").append(file.getName()).append("\" ");
+        }
+        return tmp.toString();
     }
 }
