@@ -45,6 +45,7 @@ import ij.io.FileSaver;
 import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
+import net.imagej.ops.DefaultOpService;
 import net.imagej.ops.OpService;
 
 
@@ -56,8 +57,10 @@ import net.imglib2.type.numeric.real.FloatType;
 
 
 import org.scijava.command.Command;
+import org.scijava.console.DefaultConsoleService;
+import org.scijava.log.DefaultLogger;
 import org.scijava.log.LogService;
-import org.scijava.plugin.Parameter;
+import org.scijava.log.StderrLogService;
 import org.scijava.plugin.Plugin;
 
 
@@ -109,16 +112,11 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
     private double U32_SIZE = 16_777_216.0;
 
-    //This might be required to convert 32b data
-    //final OpService ops = new Context(OpService.class).getService(OpService.class);
-
     private final int DONE = 0;
 
-    @Parameter
-    private OpService opService;
+    private final OpService opService;
 
-    @Parameter
-    private LogService logService;
+    private final LogService logService;
 
     private static String debug_arg_string = "";
     private static double totalTime = 0;
@@ -153,7 +151,6 @@ public class FTM2< T extends RealType< T >>  implements Command {
         }
         return closest;
     }
-
 
     // print input stream
     private static String GetInputStream(InputStream is) {
@@ -248,22 +245,25 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
                                 return DONE;
                         }
-                    } catch (Exception e) {
-                        System.out.println("Failed to parse argument:" + keyword_val[1]);
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                        logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
+                        return DONE;
+                    } catch (Exception e){
+                        logService.error("Failed to parse argument:" + keyword_val[1]);
                         return DONE;
                     }
                 } else {
-                    System.out.println("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
+                    logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
                     return DONE;
                 }
             }
             if (source_dir.equals("") && file_string.equals("")) {
-                System.out.println("Argument string must contain source or file variables.");
+                logService.error("Argument string must contain source or file variables.");
                 return DONE;
             }
 
             if (save_data  && target_dir.equals("")) {
-                System.out.println("When saving is enabled, a target directory must be provided");
+                logService.error("When saving is enabled, a target directory must be provided");
                 return DONE;
             }
         } else {
@@ -314,12 +314,12 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //If we wanted a preloaded image, but nothing is opened = error
         if(pre_loaded_image && imp == null){
-            IJ.error("No file was open.");
+            logService.error("No file was open.");
             return DONE;
         }
         //We want to pull from a source directory, but none was provided = error
         if (!pre_loaded_image && source_dir.equals("") && selected_files == null && file_string.equals("")) {
-            IJ.error("Error: No source directory was provided.");
+            logService.error("Error: No source directory was provided.");
             return DONE;
         }
 
@@ -332,7 +332,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //The source directory doesn't exist, so we error
         if(selected_files == null && !pre_loaded_image && !(new File(source_dir)).exists()){
-            IJ.error("Error: source directory " + source_dir + " does not exist.");
+            logService.error("Error: source directory " + source_dir + " does not exist.");
             return DONE;
         }
 
@@ -366,7 +366,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 try {
                     total_disk_size = new File(file_string).length();
                 } catch (Exception e) {
-                    System.out.println("Could not open: " + file_string);
+                    logService.error("Could not open: " + file_string);
                     return DONE;
                 }
 
@@ -379,6 +379,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             if(all_fits){ //All data can fit into memory at once
                 IJ.showStatus("Creating stacks");
 
+
                 //Load the images into memory as a single stack. This will work when its multiple seperate files
 
                 if (selected_files != null) {
@@ -387,14 +388,14 @@ public class FTM2< T extends RealType< T >>  implements Command {
                         try {
                             temp_imgs[i] = new Opener().openImage(selected_files[i].getAbsolutePath());
                         } catch (Exception e) {
-                            System.out.println("Failed to open file: " + selected_files[i].getAbsolutePath());
+                            logService.error("Failed to open file: " + selected_files[i].getAbsolutePath());
                             return DONE;
                         }
                     }
                     try {
                         ImgPlusReference = new Concatenator().concatenateHyperstacks(temp_imgs, "Concatenated", false);
                     } catch (Exception e) {
-                        System.out.println("One or more of your files might not have the same dimension");
+                        logService.error("One or more of your files might not have the same dimension");
                         return DONE;
                     }
 
@@ -403,7 +404,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     try {
                         ImgPlusReference = new Opener().openImage(file_string);
                     } catch (Exception e) {
-                        System.out.println("Failed to open file: " + file_string);
+                        logService.error("Failed to open file: " + file_string);
                         return DONE;
                     }
 
@@ -452,7 +453,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                             } else if ((vstacks.get(Stack_no).getHeight()  - slice_height) +
                                     (vstacks.get(Stack_no).getWidth()  - slice_width)
                                     != 0){
-                                IJ.error("The dimensions or bitdepth of " + listOfFiles[i].getAbsolutePath() + " did not match the values of the first file");
+                                logService.error("The dimensions or bitdepth of " + listOfFiles[i].getAbsolutePath() + " did not match the values of the first file");
                                 return DONE;
                             }
 
@@ -482,7 +483,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     save_data = true;
                 }
 
-                System.out.println("Loaded " + total_size + " slices as virtual stack with size " +String.format("%.3f",  ((double)total_disk_size)/(double)(1024*1024*1024)) + " GB");
+                logService.info("Loaded " + total_size + " slices as virtual stack with size " +String.format("%.3f",  ((double)total_disk_size)/(double)(1024*1024*1024)) + " GB");
 
             }
         } else { //The image is already loaded in imageJ in the ImagePlus imp object
@@ -502,12 +503,12 @@ public class FTM2< T extends RealType< T >>  implements Command {
             //Since it is already loaded, it will fit for sure
             all_fits = true;
 
-            System.out.println("Loaded already opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
+            logService.info("Loaded already opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
         }
 
         //Ensure we have a stack, and not a single frame
         if(total_size <= 1){
-            IJ.error("Error: Stack must have size larger than 1.");
+            logService.error("Error: Stack must have size larger than 1.");
         }
 
         //Ensure the bitdepth is byte aligned. If no bitdepth is found, set it to 16.
@@ -516,7 +517,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         else if (bit_depth <= 8) bit_depth = 8;
         else if (bit_depth <= 16) bit_depth = 16;
         else if (bit_depth <= 32) {bit_depth = 32; ratio = 4;}
-        else IJ.error("Bitdepth not Supported");
+        else logService.error("Bitdepth not Supported");
 
         if(end == 0) end = total_size; //If the end var is 0, it means process all slices
         if(end > total_size) end = total_size; //If the end is set to above the total size, set it to the total size
@@ -558,7 +559,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //We want to save to a target directory, but none was provided = error
         if (target_dir.equals("") && save_data) {
-            IJ.error("Error: No output directory was provided.");
+            logService.error("Error: No output directory was provided.");
             return DONE;
         }
 
@@ -578,217 +579,203 @@ public class FTM2< T extends RealType< T >>  implements Command {
     //It gets the current image that is selected, and passes that on to the setup and run function
     //If DONE is returned by setup, it does not run the run function
     @Override
-    public void run(){
-
-        logService.info("test");
+    public void run() {
+        logService.info("Faster Temporal Median");
         ImagePlus openImage = WindowManager.getCurrentImage();
-        ImageProcessor Dummy = null;
-        if (openImage == null){
-            if(setup(null) != DONE){
-                run(Dummy);
-            }
-        } else {
-            if(setup(openImage) != DONE) {
-                run(openImage.getProcessor());
-            }
-        }
-    }
+        if(setup(openImage) != DONE) {
+
+            //Set some variables to measure how long the entire script, and how long just saving takes
+
+            long savingTime = 0;
+            long stopTime = 0;
+            long startTime = System.nanoTime();
+
+            if (!all_fits) {
+                //Calculate the slice size in bytes and with that, the amount of slices that can be loaded at once with some buffer
+                //Window slices are subtracted because these are added on to the start and end of each bracket for overlap
+                int slice_size = (slice_height * slice_width * bit_depth) / 8;
+                int slices_that_fit = min((int) (max_bytes / slice_size / ratio) - window, total_size);
 
 
-    public void run(ImageProcessor ip) {
-        //Set some variables to measure how long the entire script, and how long just saving takes
+                ArrayList<int[]> brackets = new ArrayList<>(); //Will contain the brackets of slices that will beloaded
 
-        long savingTime = 0;
-        long stopTime = 0;
-        long startTime = System.nanoTime();
+                //Slice the entire batch up into brackets that contain the starting frame and the end frame
+                int slices_left = total_size;
+                int lower_end = start;
+                while (slices_left > 0) {
+                    slices_left -= slices_that_fit;
 
-        if(!all_fits) {
-            //Calculate the slice size in bytes and with that, the amount of slices that can be loaded at once with some buffer
-            //Window slices are subtracted because these are added on to the start and end of each bracket for overlap
-            int slice_size = (slice_height * slice_width * bit_depth)/8;
-            int slices_that_fit = min((int)(max_bytes/slice_size/ratio) - window, total_size);
-
-
-
-            ArrayList<int[]> brackets  = new ArrayList<>(); //Will contain the brackets of slices that will beloaded
-
-            //Slice the entire batch up into brackets that contain the starting frame and the end frame
-            int slices_left = total_size;
-            int lower_end = start;
-            while(slices_left > 0){
-                slices_left -= slices_that_fit;
-
-                // If the leftover frames are lower than window, it wont calculate properly
-                // So we add those frames to the rest
-                // This could be an issue on extremely small ram sizes < 300 MB orso
-                if(slices_left < window){
-                    slices_left = 0;
-                    brackets.add(new int[]{lower_end, end});
-                } else {
-                    brackets.add(new int[]{lower_end, min(slices_that_fit + lower_end, end)});
+                    // If the leftover frames are lower than window, it wont calculate properly
+                    // So we add those frames to the rest
+                    // This could be an issue on extremely small ram sizes < 300 MB orso
+                    if (slices_left < window) {
+                        slices_left = 0;
+                        brackets.add(new int[]{lower_end, end});
+                    } else {
+                        brackets.add(new int[]{lower_end, min(slices_that_fit + lower_end, end)});
+                    }
+                    lower_end = min(slices_that_fit + lower_end, end);
                 }
-                lower_end = min(slices_that_fit + lower_end, end);
-            }
 
 
+                ImageStack temp_stack; //Onto this stack the slices will be put before being processed
+                for (int k = 0; k < brackets.size(); k++) {
+                    int[] t = brackets.get(k); //Get the start and end slice numbers
 
+                    temp_stack = new ImageStack(slice_width, slice_height); //Create a new Imagestack, flushing the old one
+                    //the start and end are either the start/end or the values in t +- window/2
+                    //This currently only supports look-around, not lookback or lookforward
+                    int s = t[0] == start ? start : t[0] - window / 2;
+                    int e = t[1] == end ? end : t[1] + window / 2;
 
-            ImageStack temp_stack; //Onto this stack the slices will be put before being processed
-            for(int k = 0; k < brackets.size(); k++) {
-                int[] t = brackets.get(k); //Get the start and end slice numbers
+                    int temp_index; //Index into which stack inside vstacks should be accesed
+                    int temp_prev_sizes = 0; //What is the offset of the frame_number (i) compared to the size of the current stack
 
-                temp_stack = new ImageStack(slice_width, slice_height); //Create a new Imagestack, flushing the old one
-                //the start and end are either the start/end or the values in t +- window/2
-                //This currently only supports look-around, not lookback or lookforward
-                int s = t[0] == start ? start : t[0] - window/2;
-                int e = t[1] == end ? end : t[1] + window/2;
-
-                int temp_index; //Index into which stack inside vstacks should be accesed
-                int temp_prev_sizes = 0; //What is the offset of the frame_number (i) compared to the size of the current stack
-
-                //Set the temp_index and the prev_sizes to their correct start values for the current bracket
-                for(temp_index = 0; vstacks.get(temp_index).size() + temp_prev_sizes < s; temp_index++) temp_prev_sizes += vstacks.get(temp_index).size();
-
-                //Load the frames, as defined by s and e, into the temp_stack from disk, loading them into memory
-                //If the current stack runs out, temp index is increased, as is prev_sizes
-                for(int i = s; i <= e; i++ ) {
-                    if(i > slice_intervals.get(temp_index)){
+                    //Set the temp_index and the prev_sizes to their correct start values for the current bracket
+                    for (temp_index = 0; vstacks.get(temp_index).size() + temp_prev_sizes < s; temp_index++)
                         temp_prev_sizes += vstacks.get(temp_index).size();
-                        temp_index++;
+
+                    //Load the frames, as defined by s and e, into the temp_stack from disk, loading them into memory
+                    //If the current stack runs out, temp index is increased, as is prev_sizes
+                    for (int i = s; i <= e; i++) {
+                        if (i > slice_intervals.get(temp_index)) {
+                            temp_prev_sizes += vstacks.get(temp_index).size();
+                            temp_index++;
 
 
-                    }
-                    temp_stack.addSlice("" + i, vstacks.get(temp_index).getProcessor(i - temp_prev_sizes));
-                }
-
-                System.out.println("Loaded from slice " +  s + " till slice " + e);
-
-                long intertime = System.nanoTime();
-
-                //Wrap the temp_stack into an imageplus and then an Img Object
-                //This creates references, not copies
-                ImagePlus temp_imp = new ImagePlus("", temp_stack);
-                Img<T> temp_imglib = ImageJFunctions.wrapReal(temp_imp);
-
-                //We need to do this check because otherwise a 32b float might sneak through
-                if (temp_imglib.firstElement() instanceof FloatType){
-
-                    double[] result = computeMinMax(temp_imglib.iterator());
-
-                    final double temp_min = result[0];
-                    final double temp_max = min(result[1], U32_SIZE);
-
-                    if (abs(temp_imglib.firstElement().getRealFloat()) % 1.0 > 0.0 | result[1] > U32_SIZE) {
-                        temp_imglib.forEach(pixel -> pixel.setReal(((pixel.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
+                        }
+                        temp_stack.addSlice("" + i, vstacks.get(temp_index).getProcessor(i - temp_prev_sizes));
                     }
 
-                    temp_imglib = (Img<T>) opService.convert().uint32(temp_imglib);
-                    temp_imp.close();
+                    System.out.println("Loaded from slice " + s + " till slice " + e);
 
+                    long intertime = System.nanoTime();
+
+                    //Wrap the temp_stack into an imageplus and then an Img Object
+                    //This creates references, not copies
+                    ImagePlus temp_imp = new ImagePlus("", temp_stack);
+                    Img<T> temp_imglib = ImageJFunctions.wrapReal(temp_imp);
+
+                    //We need to do this check because otherwise a 32b float might sneak through
+                    if (temp_imglib.firstElement() instanceof FloatType) {
+
+                        double[] result = computeMinMax(temp_imglib.iterator());
+
+                        final double temp_min = result[0];
+                        final double temp_max = min(result[1], U32_SIZE);
+
+                        if (abs(temp_imglib.firstElement().getRealFloat()) % 1.0 > 0.0 | result[1] > U32_SIZE) {
+                            temp_imglib.forEach(pixel -> pixel.setReal(((pixel.getRealFloat() - temp_min) * (U32_SIZE) / (temp_max - temp_min))));
+                        }
+
+                        temp_imglib = (Img<T>) opService.convert().uint32(temp_imglib);
+                        temp_imp.close();
+
+                        System.gc();
+                    }
+
+                    //Process the data with the defined window
+                    //This happens in place
+                    TemporalMedian.main(temp_imglib, window, bit_depth, 0, (int) temp_imglib.dimension(2));
+                    stopTime += (System.nanoTime() - intertime);
+
+
+                    if (bit_depth == 32) {
+
+                        temp_stack = ImageJFunctions.wrapFloat(temp_imglib, "Result").getStack();
+
+                        System.gc();
+                    }
+
+                    //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
+                    ImageStack final_stack = new ImageStack(slice_width, slice_height);
+
+                    //Create a reference in the final_stack for all the frames we want(t[0] to t[1]), unless it is the start or end.
+                    final int starting_value = t[0] == start ? 1 : window / 2 + 1;
+                    final int ending_value = (t[1] == end ? temp_stack.size() : temp_stack.size() - window / 2 - 1);
+
+                    for (int j = starting_value; j <= ending_value; j++) {
+                        final_stack.addSlice(temp_stack.getProcessor(j));
+                    }
+
+                    //Try to save the file and record how long this takes
+                    //If it fails, error
+                    //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
+                    intertime = System.nanoTime();
+                    if (!saveImagePlus(target_dir + "/part_" + (k + 1) + ".tif", new ImagePlus("", final_stack))) {
+                        IJ.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1) + ".tif") + "\\Median_corrected.tif");
+                        System.exit(0);
+                    }
+                    savingTime += (System.nanoTime() - intertime);
+
+                    //We gc not that often, since even with default settings <10 brackets will be used normally
                     System.gc();
                 }
-
-                //Process the data with the defined window
-                //This happens in place
-                TemporalMedian.main(temp_imglib, window, bit_depth, 0, (int) temp_imglib.dimension(2));
-                stopTime += (System.nanoTime() - intertime);
-
-
-                if(bit_depth == 32){
-
-                    temp_stack = ImageJFunctions.wrapFloat(temp_imglib, "Result").getStack();
-
-                    System.gc();
+                //Open all created files as virtualstacks and display them
+                //This is not able to be done in a single window afaik
+                //The contrast command is to ensure the visualisation is correct since the min and max changed.
+                for (int k = 0; k < brackets.size(); k++) {
+                    IJ.openVirtual(target_dir + "/part_" + (k + 1) + ".tif").show();
+                    IJ.run("Enhance Contrast", "saturated=0.0");
                 }
 
-                //Since the first window/2 and last window/2 frames are there just for overlap, we do not need these
-                ImageStack final_stack = new ImageStack(slice_width, slice_height);
+            } else {
 
-                //Create a reference in the final_stack for all the frames we want(t[0] to t[1]), unless it is the start or end.
-                final int starting_value = t[0] == start ? 1 : window/2 + 1;
-                final int ending_value = (t[1] == end ? temp_stack.size() : temp_stack.size() - window/2 - 1);
+                long interTime = System.nanoTime();
+                //Then process the data, either on the smaller view or the entire dataset
 
-                for(int j = starting_value; j <= ending_value; j++){
-                    final_stack.addSlice(temp_stack.getProcessor(j));
+                TemporalMedian.main(imageData, window, bit_depth, start - 1, end);
+
+                stopTime = System.nanoTime() - interTime;
+                //This is just to refresh the image
+
+                //this crops the image if need be
+                if (start > 1 | end < total_size) {
+                    ImagePlus TempReference = new OwnSubStackMaker().stackRange(ImgPlusReference, start, end, ImgPlusReference.getTitle());
+                    //ImagePlus test = new SubstackMaker().makeSubstack(ImgPlusReference, "delete " + start + "-" + end);
+                    ImgPlusReference.close(); //Close the old one
+                    ImgPlusReference = TempReference; //Re-reference the reference
                 }
 
-                //Try to save the file and record how long this takes
-                //If it fails, error
-                //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
-                intertime = System.nanoTime();
-                if(!saveImagePlus(target_dir + "/part_" + (k + 1)+ ".tif", new ImagePlus("", final_stack))){
-                    IJ.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1)+ ".tif") + "\\Median_corrected.tif");
+
+                if (bit_depth == 32) {
+                    //ImageJ doesnt want to display 32b int data, so i have to cast it to 32b float.
+                    //this technically leads to precision loss, but this is unlikely as the values would have to be >U32_SIZE
+                    // which i prevent.
+                    //This is not an issue with saving
+
+                    CurrentWindow.close();
+
+                    ImgPlusReference = ImageJFunctions.wrapFloat(imageData, "Result");
+                }
+
+                ImgPlusReference.show();
+
+                //Run the contrast command to readjust the min and max
+                IJ.run("Enhance Contrast", "saturated=0.0");
+
+                //If needed try to save the data
+                if (save_data && !saveImagePlus(target_dir + "\\" + ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif", ImgPlusReference)) {
+                    IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                     System.exit(0);
                 }
-                savingTime += (System.nanoTime() - intertime);
-
-                //We gc not that often, since even with default settings <10 brackets will be used normally
-                System.gc();
-            }
-            //Open all created files as virtualstacks and display them
-            //This is not able to be done in a single window afaik
-            //The contrast command is to ensure the visualisation is correct since the min and max changed.
-            for(int k = 0; k < brackets.size(); k++) {
-                IJ.openVirtual(target_dir + "/part_" + (k + 1) + ".tif").show();
-                IJ.run("Enhance Contrast", "saturated=0.0");
             }
 
-        } else {
+            IJ.showStatus("Finished Processing!");
 
-            long interTime = System.nanoTime();
-            //Then process the data, either on the smaller view or the entire dataset
-
-            TemporalMedian.main(imageData, window, bit_depth, start - 1, end);
-
-            stopTime = System.nanoTime() - interTime;
-            //This is just to refresh the image
-
-            //this crops the image if need be
-            if(start > 1 | end < total_size) {
-                ImagePlus TempReference = new OwnSubStackMaker().stackRange(ImgPlusReference, start, end, ImgPlusReference.getTitle());
-                //ImagePlus test = new SubstackMaker().makeSubstack(ImgPlusReference, "delete " + start + "-" + end);
-                ImgPlusReference.close(); //Close the old one
-                ImgPlusReference = TempReference; //Re-reference the reference
-            }
+            startTime = System.nanoTime() - startTime;
+            //Print some extra information about how long everything took and the processing speed
 
 
-            if(bit_depth == 32) {
-                //ImageJ doesnt want to display 32b int data, so i have to cast it to 32b float.
-                //this technically leads to precision loss, but this is unlikely as the values would have to be >U32_SIZE
-                // which i prevent.
-                //This is not an issue with saving
-
-                CurrentWindow.close();
-
-                ImgPlusReference = ImageJFunctions.wrapFloat(imageData, "Result");
-            }
-
-            ImgPlusReference.show();
-
-            //Run the contrast command to readjust the min and max
-            IJ.run("Enhance Contrast", "saturated=0.0");
-
-            //If needed try to save the data
-            if (save_data && !saveImagePlus(target_dir + "\\" + ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif", ImgPlusReference)){
-                IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
-                System.exit(0);
-            }
+            double spendTime = (double) stopTime / 1000000000;
+            double savedTime = (double) savingTime / 1000000000;
+            double allTime = (double) startTime / 1000000000;
+            totalTime += spendTime;
+            System.out.println("Total took " + String.format("%.3f", allTime) + " s");
+            System.out.println("Processing took " + String.format("%.3f", spendTime) + " s");
+            if (savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
+            System.out.println("Processed " + (end - start + 1) + " frames at " + String.format("%.1f", (total_disk_size / (1024 * 1024) / spendTime)) + " MB/s");
         }
-
-        IJ.showStatus("Finished Processing!");
-
-        startTime = System.nanoTime() - startTime;
-        //Print some extra information about how long everything took and the processing speed
-
-
-        double spendTime = (double)stopTime/1000000000;
-        double savedTime = (double)savingTime/1000000000;
-        double allTime = (double)startTime/1000000000;
-        totalTime += spendTime;
-        System.out.println("Total took " + String.format("%.3f", allTime) + " s");
-        System.out.println("Processing took " + String.format("%.3f", spendTime) + " s");
-        if(savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
-        System.out.println("Processed " + (end - start + 1) + " frames at " +  String.format("%.1f", (total_disk_size/(1024*1024)/spendTime))+ " MB/s");
     }
 
 
@@ -796,7 +783,6 @@ public class FTM2< T extends RealType< T >>  implements Command {
     public static void main(String[] args) {
         net.imagej.ImageJ ij = new net.imagej.ImageJ();
         ij.ui().showUI();
-
 
 
 
@@ -813,7 +799,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end= 200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
@@ -823,16 +809,18 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         for(int i = 0; i < runs; i++){
             System.out.println("Run:" + (i+1));
-            //ImagePlus imp = IJ.openImage("C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif");
+            //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
             //imp.show();
             ij.command().run(FTM2_select_files.class, true);
-            //WindowManager.closeAllWindows();
+
+            WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
             //    if (!file.isDirectory())
             //        file.delete();
             System.gc();
         }
         System.out.println("Average runtime " + String.format("%.3f", totalTime/(float) runs) + " s");
+
     }
 }
 
