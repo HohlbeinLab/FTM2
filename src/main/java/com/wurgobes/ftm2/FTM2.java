@@ -799,7 +799,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end= 200";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
@@ -813,7 +813,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             //imp.show();
             ij.command().run(FTM2_select_files.class, true);
 
-            WindowManager.closeAllWindows();
+            //WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
             //    if (!file.isDirectory())
             //        file.delete();

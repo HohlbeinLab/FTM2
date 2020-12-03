@@ -85,9 +85,9 @@ public class TemporalMedian {
             threads[ithread] = new Thread(() -> {
 
                 // Get the RandomAccess, twice for the same image
-                RandomAccess<U> front = ranked.randomAccess(); // front is used to read new values
-                RandomAccess<U> back = (RandomAccess<U>) img.randomAccess(); // back is used to set the median corrected values
-                MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
+                final RandomAccess<U> front = ranked.randomAccess(); // front is used to read new values
+                final RandomAccess<U> back = (RandomAccess<U>) img.randomAccess(); // back is used to set the median corrected values
+                final MedianHistogram median = new MedianHistogram(window, rankmap.getMaxRank());
                 for (int j = ai.getAndIncrement(); j < pixels; j = ai.getAndIncrement()) { //get unique i
 
                     final int[] pos = { j % imgw, j / imgw, offset }; //Get position based on j
@@ -113,7 +113,7 @@ public class TemporalMedian {
 
 
                     for (int i = 0; i <  zSteps; ++i) {
-                        median.add((int) front.get().getRealFloat());
+                        median.add(front.get().getInteger());
                         front.fwd(2); // Move the front one forward in the 2nd dimension to the next slice
                         final U t = back.get(); // Get the reference to the back's pixel
                         t.setInteger(Math.max(t.getInteger() - rankmap.fromRanked( median.get()), 0)); // Set the back's value, median adjusted
