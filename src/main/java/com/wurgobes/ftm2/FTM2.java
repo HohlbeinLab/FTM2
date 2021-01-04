@@ -45,7 +45,7 @@ import ij.io.FileSaver;
 import ij.WindowManager;
 import ij.gui.YesNoCancelDialog;
 
-import net.imagej.ops.DefaultOpService;
+
 import net.imagej.ops.OpService;
 
 
@@ -57,10 +57,7 @@ import net.imglib2.type.numeric.real.FloatType;
 
 
 import org.scijava.command.Command;
-import org.scijava.console.DefaultConsoleService;
-import org.scijava.log.DefaultLogger;
 import org.scijava.log.LogService;
-import org.scijava.log.StderrLogService;
 import org.scijava.plugin.Plugin;
 
 
@@ -74,7 +71,6 @@ import java.util.concurrent.atomic.DoubleAccumulator;
 
 import static java.lang.Math.abs;
 import static java.lang.Math.min;
-
 
 
 //Settings for ImageJ, settings where it'll appear in the menu
@@ -242,7 +238,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 U32_SIZE = Integer.parseInt(keyword_val[1]);
                                 break;
                             default:
-                                System.out.println("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
+                                logService.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
                                 return DONE;
                         }
                     } catch (ArrayIndexOutOfBoundsException e) {
@@ -292,7 +288,6 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
             gd.addHelp(content);
 
-
             //Show the dialogue
             gd.showDialog();
 
@@ -306,7 +301,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             window = (int)gd.getNextNumber();
             start = (int)gd.getNextNumber();
             end = (int)gd.getNextNumber();
-            //pre_loaded_image = gd.getNextBoolean();
+
             pre_loaded_image = type == 3;
             save_data = gd.getNextBoolean();
             target_dir = gd.getNextString();
@@ -339,7 +334,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //If the target directory doesn't exist, we try to create it, if that fails, we error
         if (save_data && !(new File(target_dir)).exists()){
             if(!new File(target_dir).mkdir()) {
-                IJ.error("Error: Failed to create target directory " + target_dir);
+                logService.error("Error: Failed to create target directory " + target_dir);
             }
         }
 
@@ -382,7 +377,21 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                 //Load the images into memory as a single stack. This will work when its multiple seperate files
 
-                if (selected_files != null) {
+                // Marks if the folder picked contains non-tiff files
+                // If this occurs, we use the selected files method, discarding any non-tif files
+                boolean dirty_folder = false;
+                File[] checked_files;
+                if(!source_dir.equals("")){
+                    File dir = new File(source_dir);
+                    for(File file : Objects.requireNonNull(dir.listFiles())){
+                        if(!file.getName().endsWith(".tif")) dirty_folder = true;
+                    }
+                    checked_files = dir.listFiles((dir1, name) -> name.endsWith(".tif"));
+                    if(dirty_folder) selected_files = checked_files;
+                }
+
+
+                if (selected_files != null || dirty_folder) {
                     ImagePlus[] temp_imgs = new ImagePlus[selected_files.length];
                     for(int i = 0; i < selected_files.length; i++){
                         try {
@@ -428,7 +437,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 //Get bits per pixel
                 bit_depth = imageData.firstElement().getBitsPerPixel();
 
-                System.out.println("Loaded opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
+                logService.info("Loaded opened image with " + total_size + " slices with size " + total_disk_size + " as normal stack");
             }  else { //All the data does not fit into memory
                 IJ.showStatus("Creating Virtualstack(s)");
 
@@ -462,7 +471,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                             total_size += vstacks.get(Stack_no).size();
                             Stack_no++;
 
-                            System.out.println(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no - 1).size() + " slices as virtual stack");
+                            logService.info(i + ", " + listOfFiles[i].getPath() + ", " + vstacks.get(Stack_no - 1).size() + " slices as virtual stack");
                         }
                     }
                 } else {
@@ -474,7 +483,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     slice_intervals.add(vstacks.get(0).size() + total_size);
                     total_size += vstacks.get(0).size();
 
-                    System.out.println(file_string+ ", " + vstacks.get(0).size() + " slices as virtual stack");
+                    logService.info(file_string+ ", " + vstacks.get(0).size() + " slices as virtual stack");
                 }
 
                 //Even if you don't want to save, if the file is too large, it will have to happen
@@ -647,7 +656,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                         temp_stack.addSlice("" + i, vstacks.get(temp_index).getProcessor(i - temp_prev_sizes));
                     }
 
-                    System.out.println("Loaded from slice " + s + " till slice " + e);
+                    logService.info("Loaded from slice " + s + " till slice " + e);
 
                     long intertime = System.nanoTime();
 
@@ -703,7 +712,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
                     intertime = System.nanoTime();
                     if (!saveImagePlus(target_dir + "/part_" + (k + 1) + ".tif", new ImagePlus("", final_stack))) {
-                        IJ.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1) + ".tif") + "\\Median_corrected.tif");
+                        logService.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1) + ".tif") + "\\Median_corrected.tif");
                         System.exit(0);
                     }
                     savingTime += (System.nanoTime() - intertime);
@@ -756,12 +765,11 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                 //If needed try to save the data
                 if (save_data && !saveImagePlus(target_dir + "\\" + ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif", ImgPlusReference)) {
-                    IJ.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
+                    logService.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                     System.exit(0);
                 }
             }
 
-            IJ.showStatus("Finished Processing!");
 
             startTime = System.nanoTime() - startTime;
             //Print some extra information about how long everything took and the processing speed
@@ -771,10 +779,14 @@ public class FTM2< T extends RealType< T >>  implements Command {
             double savedTime = (double) savingTime / 1000000000;
             double allTime = (double) startTime / 1000000000;
             totalTime += spendTime;
-            System.out.println("Total took " + String.format("%.3f", allTime) + " s");
-            System.out.println("Processing took " + String.format("%.3f", spendTime) + " s");
-            if (savingTime != 0) System.out.println("Saving took " + String.format("%.3f", savedTime) + " s");
-            System.out.println("Processed " + (end - start + 1) + " frames at " + String.format("%.1f", (total_disk_size / (1024 * 1024) / spendTime)) + " MB/s");
+            logService.info("Total took " + String.format("%.3f", allTime) + " s");
+            logService.info("Processing took " + String.format("%.3f", spendTime) + " s");
+            if (savingTime != 0) logService.info("Saving took " + String.format("%.3f", savedTime) + " s");
+            logService.info("Processed " + (end - start + 1) + " frames at " + String.format("%.1f", (total_disk_size / (1024 * 1024) / spendTime)) + " MB/s");
+
+            IJ.showStatus("Finished Processing!");
+            IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
+
         }
     }
 
@@ -799,9 +811,10 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
+        debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
 
         //debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
@@ -811,7 +824,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             System.out.println("Run:" + (i+1));
             //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
             //imp.show();
-            ij.command().run(FTM2_select_files.class, true);
+            ij.command().run(FTM2_select_folder.class, true);
 
             //WindowManager.closeAllWindows();
             //for(File file: Objects.requireNonNull(new File(target_folder).listFiles()))
@@ -910,11 +923,25 @@ class MultiFileSelect implements ActionListener {
     @Override
     public void actionPerformed(ActionEvent e) {
         if (e.getActionCommand().equals("Select Files")) {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setMultiSelectionEnabled(true);
-            chooser.showOpenDialog(new JFrame());
-            files = chooser.getSelectedFiles();
-            IJ.showMessage("You selected: " + getFileNames());
+            boolean notDone = true;
+            while(notDone) {
+                JFileChooser chooser = new JFileChooser();
+                chooser.setMultiSelectionEnabled(true);
+                chooser.showOpenDialog(new JFrame());
+                files = chooser.getSelectedFiles();
+
+                notDone = false;
+                for(File file : files){
+                    if(!file.getName().endsWith(".tif")){
+                        IJ.showMessage("Cannot select non-tif files: " + file.getName());
+                        notDone = true;
+                    }
+                }
+                
+                if(!notDone)
+                    IJ.showMessage("You selected: " + getFileNames());
+
+            }
         } else {
             YesNoCancelDialog answer = new YesNoCancelDialog(new JFrame(), "Clear list of files", "Do you want to clear:" + getFileNames());
             if(answer.yesPressed()) files = null;
