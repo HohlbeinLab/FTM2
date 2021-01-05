@@ -18,7 +18,7 @@ public class About implements Command {
     public void run() {
         log.info("Faster Temporal Median About");
         String content = "Developed by Martijn Gobes at the Holhbein Lab.\nMore information can be found at https://github.com/HohlbeinLab/FTM2\n" +
-                "Current Version: 0.9.9.5";
+                "Current Version: 0.9.9.6";
 
         GenericDialog gd = new GenericDialog("About");
         gd.addMessage(content);
