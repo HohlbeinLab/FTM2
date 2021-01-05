@@ -314,7 +314,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         }
         //We want to pull from a source directory, but none was provided = error
         if (!pre_loaded_image && source_dir.equals("") && selected_files == null && file_string.equals("")) {
-            logService.error("Error: No source directory was provided.");
+            logService.error("Error: No source directory or file was provided.");
             return DONE;
         }
 
@@ -391,7 +391,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 }
 
 
-                if (selected_files != null || dirty_folder) {
+                if ((selected_files != null || dirty_folder) && file_string.equals("")) {
                     ImagePlus[] temp_imgs = new ImagePlus[selected_files.length];
                     for(int i = 0; i < selected_files.length; i++){
                         try {
@@ -812,9 +812,9 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
-        debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
+        //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
 
         //debug_arg_string = "source=F:\\ThesisData\\input save_data=true target=F:\\ThesisData\\output";
@@ -937,7 +937,7 @@ class MultiFileSelect implements ActionListener {
                         notDone = true;
                     }
                 }
-                
+
                 if(!notDone)
                     IJ.showMessage("You selected: " + getFileNames());
 
