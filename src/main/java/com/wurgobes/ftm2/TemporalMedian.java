@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
+import ij.Prefs;
 import net.imglib2.*;
 
 import net.imglib2.converter.Converters;
@@ -56,6 +57,7 @@ public class TemporalMedian {
         final int zSize = min((int) img.dimension(2), end);
         final int zSteps = zSize - window;
 
+        final int coreCount = Prefs.getThreads();
 
         final RandomAccessibleInterval<U> int_img = (RandomAccessibleInterval<U>) img;
 
@@ -79,7 +81,7 @@ public class TemporalMedian {
 
 
         final AtomicInteger ai = new AtomicInteger(0); //Atomic Integer is a thread safe incremental integer
-        final Thread[] threads = createThreadArray(); //Get maximum of threads
+        final Thread[] threads = createThreadArray(coreCount); //Get maximum of threads
         //Set the run function for each thread
 		for (int ithread = 0; ithread < threads.length; ithread++) {
             threads[ithread] = new Thread(() -> {
