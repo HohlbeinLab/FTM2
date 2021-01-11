@@ -4,7 +4,7 @@ A rewritten version of the Fast Temporal Median Filter, enabling extra features 
 ## Installation
 One can get the Plugin by using the download link below, or by subscribing to the Hohlbein lab update site.
 You can subscribe by going to Help > Update... > Manage Update Sites and checking the Hohlbein lab site.
-It will automatically be downlaoded and updated.
+It will automatically be downloaded and updated.
 
 Current Version: 0.9.9.6  
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)  
