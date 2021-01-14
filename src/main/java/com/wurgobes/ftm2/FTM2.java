@@ -64,6 +64,7 @@ import org.scijava.plugin.Plugin;
 import java.awt.event.ActionEvent;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.*;
 import javax.swing.*;
 import java.awt.event.ActionListener;
@@ -242,7 +243,11 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 return DONE;
                         }
                     } catch (ArrayIndexOutOfBoundsException e) {
-                        logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
+                        if (a.equals("")){
+                            logService.error("Empty token. Are there double spaces in the argument string?");
+                        } else {
+                            logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
+                        }
                         return DONE;
                     } catch (Exception e){
                         logService.error("Failed to parse argument:" + keyword_val[1]);
@@ -711,8 +716,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //If it fails, error
                     //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
                     intertime = System.nanoTime();
-                    if (!saveImagePlus(target_dir + "/part_" + (k + 1) + ".tif", new ImagePlus("", final_stack))) {
-                        logService.error("Failed to write to:" + (target_dir + "\\part_" + (k + 1) + ".tif") + "\\Median_corrected.tif");
+                    if (!saveImagePlus(Paths.get(target_dir, "/part_" + (k + 1) + ".tif").toString(), new ImagePlus("", final_stack))) {
+                        logService.error("Failed to write to:" +Paths.get(target_dir, "/part_" + (k + 1) + ".tif").toString());
                         System.exit(0);
                     }
                     savingTime += (System.nanoTime() - intertime);
@@ -764,7 +769,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 IJ.run("Enhance Contrast", "saturated=0.0");
 
                 //If needed try to save the data
-                if (save_data && !saveImagePlus(target_dir + "\\" + ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif", ImgPlusReference)) {
+                if (save_data && !saveImagePlus(Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif").toString(), ImgPlusReference)) {
                     logService.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
                     System.exit(0);
                 }
@@ -812,7 +817,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif";
+        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
