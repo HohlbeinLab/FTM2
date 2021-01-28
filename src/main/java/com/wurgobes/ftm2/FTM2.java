@@ -121,7 +121,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
     public ImagePlus ImgPlusReference;
 
-    private boolean concat = true;
+    private boolean concat = false;
     private boolean showResults = true;
 
     private String savingFileName = "";
