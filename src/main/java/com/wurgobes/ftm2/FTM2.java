@@ -49,6 +49,7 @@ import ij.gui.YesNoCancelDialog;
 import net.imagej.ops.OpService;
 
 
+import net.imagej.ops.Ops;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 
@@ -61,6 +62,7 @@ import org.scijava.log.LogService;
 import org.scijava.plugin.Plugin;
 
 
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -70,8 +72,7 @@ import javax.swing.*;
 import java.awt.event.ActionListener;
 import java.util.concurrent.atomic.DoubleAccumulator;
 
-import static java.lang.Math.abs;
-import static java.lang.Math.min;
+import static java.lang.Math.*;
 
 
 //Settings for ImageJ, settings where it'll appear in the menu
@@ -118,14 +119,30 @@ public class FTM2< T extends RealType< T >>  implements Command {
     private static String debug_arg_string = "";
     private static double totalTime = 0;
 
-    private ImagePlus ImgPlusReference;
+    public ImagePlus ImgPlusReference;
 
+    private boolean concat = true;
+    private boolean showResults = true;
+
+    private String savingFileName = "";
+    private boolean concatRun = false;
+
+
+    FTM2(int t, OpService op, LogService log, String command){
+        this.type = t;
+        this.opService = op;
+        this.logService = log;
+        debug_arg_string = command;
+
+    }
 
     FTM2(int t, OpService op, LogService log) {
         this.type = t;
         this.opService = op;
         this.logService = log;
     }
+
+
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
         //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not
@@ -208,7 +225,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         }
         if(arg != null && !arg.equals("")){
             String[] arguments = arg.split(" ");
-            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "range"};
+            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun"};
             for(String a : arguments) {
                 if (a.contains("=")) {
                     String[] keyword_val = a.split("=");
@@ -236,7 +253,16 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 save_data = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             case "range":
-                                U32_SIZE = Integer.parseInt(keyword_val[1]);
+                                U32_SIZE = Double.parseDouble(keyword_val[1]);
+                                break;
+                            case "concat":
+                                concat = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "show":
+                                showResults = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "hiddenConcatRun":
+                                concatRun = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             default:
                                 logService.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
@@ -286,9 +312,13 @@ public class FTM2< T extends RealType< T >>  implements Command {
             gd.addNumericField("Window size", window, 0);
             gd.addNumericField("Begin", start, 0);
             gd.addNumericField("End (0 for all)", end, 0);
+            gd.addCheckbox("Concatenate Files?", concat);
+            gd.addToSameRow();
+            gd.addMessage("This will treat files from the folder/selected files as one large continous dataset if they have the same dimension and bitdepth. Uncheck this to seperately process files with the same settings.");
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
+            gd.addCheckbox("Show output?", showResults);
             gd.addDirectoryField("Output directory", target_dir, 50);
 
             gd.addHelp(content);
@@ -308,9 +338,14 @@ public class FTM2< T extends RealType< T >>  implements Command {
             end = (int)gd.getNextNumber();
 
             pre_loaded_image = type == 3;
+            concat = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
+            showResults = gd.getNextBoolean();
             target_dir = gd.getNextString();
         }
+
+        if (concatRun)
+            pre_loaded_image = false;
 
         //If we wanted a preloaded image, but nothing is opened = error
         if(pre_loaded_image && imp == null){
@@ -343,6 +378,47 @@ public class FTM2< T extends RealType< T >>  implements Command {
             }
         }
 
+
+
+        if(!concat){
+            // this is hacky, but works
+
+            File[] listOfFiles = {}; //Will contain the list of File objects from either the file select or the folder select
+
+            if (selected_files == null){//Selected files will be a File[] that contains preselected files
+                listOfFiles = new File(source_dir).listFiles();
+            } else if (file_string.equals("")){//File string is an object that can be passed from the command line
+                listOfFiles = selected_files;
+            }
+
+            if(listOfFiles == null || listOfFiles.length == 0){
+                logService.error("Folder is empty!");
+                return DONE;
+            }
+
+            if(listOfFiles.length > 1){
+                for(File file : listOfFiles){
+                    if(!file.getName().contains(".tif"))
+                        continue;
+                    String command = "file=" + file.getAbsolutePath()
+                            + " target=" + target_dir
+                            + " start=" + start
+                            + " end=" + end
+                            + " window=" + window
+                            + " save_data=" + save_data
+                            + " range=" + U32_SIZE
+                            + " concat=" + true
+                            + " show=" + showResults
+                            + " hiddenConcatRun=" + true;
+                    FTM2<T> tempFTM = new FTM2<>(1, opService, logService, command);
+                    tempFTM.run();
+                    if(!showResults) tempFTM.ImgPlusReference.close();
+                }
+                logService.info("Finished processing all files seperately");
+                return DONE;
+            }
+        }
+
         //If an image is not yet loaded, we should have the info required to load
         if(!pre_loaded_image){
 
@@ -354,7 +430,10 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 listOfFiles = selected_files;
             }
 
-
+            if(listOfFiles == null || listOfFiles.length == 0){
+                logService.error("Folder is empty");
+                return DONE;
+            }
 
             if(file_string.equals("")){
                 //Calculate the total file size of all files to be processed
@@ -455,6 +534,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     for (int i = 0; i < listOfFiles.length; i++) {
                         //Check if the File Object is a tif
                         if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith(".tif")) {
+                            if(savingFileName.equals(""))
+                                savingFileName = listOfFiles[i].getName();
                             //Load the file into memory as a VirtualStack
                             vstacks.add(IJ.openVirtual(listOfFiles[i].getPath()).getStack());
 
@@ -480,6 +561,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                         }
                     }
                 } else {
+                    savingFileName = new File(file_string).getName();
                     vstacks.add(IJ.openVirtual(file_string).getStack());
                     slice_height = vstacks.get(0).getHeight();
                     slice_width = vstacks.get(0).getWidth();
@@ -716,7 +798,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //If it fails, error
                     //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
                     intertime = System.nanoTime();
-                    if (!saveImagePlus(Paths.get(target_dir, "/part_" + (k + 1) + ".tif").toString(), new ImagePlus("", final_stack))) {
+                    if (!saveImagePlus(Paths.get(target_dir, "/" + savingFileName + "_" + (k + 1) + ".tif").toString(), new ImagePlus("", final_stack))) {
                         logService.error("Failed to write to:" +Paths.get(target_dir, "/part_" + (k + 1) + ".tif").toString());
                         System.exit(0);
                     }
@@ -725,12 +807,15 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //We gc not that often, since even with default settings <10 brackets will be used normally
                     System.gc();
                 }
-                //Open all created files as virtualstacks and display them
-                //This is not able to be done in a single window afaik
-                //The contrast command is to ensure the visualisation is correct since the min and max changed.
-                for (int k = 0; k < brackets.size(); k++) {
-                    IJ.openVirtual(target_dir + "/part_" + (k + 1) + ".tif").show();
-                    IJ.run("Enhance Contrast", "saturated=0.0");
+
+                if(showResults) {
+                    //Open all created files as virtualstacks and display them
+                    //This is not able to be done in a single window afaik
+                    //The contrast command is to ensure the visualisation is correct since the min and max changed.
+                    for (int k = 0; k < brackets.size(); k++) {
+                        IJ.openVirtual(target_dir + "/" + savingFileName + "_"   + (k + 1) + ".tif").show();
+                        IJ.run("Enhance Contrast", "saturated=0.0");
+                    }
                 }
 
             } else {
@@ -763,15 +848,24 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     ImgPlusReference = ImageJFunctions.wrapFloat(imageData, "Result");
                 }
 
-                ImgPlusReference.show();
+                if(showResults) {
+                    ImgPlusReference.show();
+                    ImgPlusReference.setTitle(ImgPlusReference.getTitle() + "_median_corrected");
 
-                //Run the contrast command to readjust the min and max
-                IJ.run("Enhance Contrast", "saturated=0.0");
+                    //Run the contrast command to readjust the min and max
+                    IJ.run("Enhance Contrast", "saturated=0.0");
+                }
 
                 //If needed try to save the data
-                if (save_data && !saveImagePlus(Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif").toString(), ImgPlusReference)) {
-                    logService.error("Failed to write to:" + target_dir + "\\Median_corrected.tif");
-                    System.exit(0);
+                if (save_data) {
+                    String saveName;
+                    if(concat)
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif").toString();
+                    else
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected_concatenated.tif").toString();
+                    if(!saveImagePlus(saveName, ImgPlusReference)) {
+                        logService.error("Failed to write to:" + saveName);
+                    }
                 }
             }
 
@@ -790,7 +884,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
             logService.info("Processed " + (end - start + 1) + " frames at " + String.format("%.1f", (total_disk_size / (1024 * 1024) / spendTime)) + " MB/s");
 
             IJ.showStatus("Finished Processing!");
-            IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
+            if(!concatRun)
+                IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
 
         }
     }
@@ -806,7 +901,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
 
         //imp.show();
-        String target_folder = "F:\\ThesisData\\output";
+       // String target_folder = "F:\\ThesisData\\output";
+        String target_folder = "C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
@@ -817,7 +913,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
-        debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
+        debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder concat=false save_data=true show=false target=" + target_folder;
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
