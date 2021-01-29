@@ -42,9 +42,9 @@ This plugin can also be run from a macro.<br>
 An example: `run("Select Files and Run", "source=C:\C:\Users\Your_Name\your_folder\image_file.tif target=your_folder start=1 end=0 window=50 save_data=0")`<br>
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.<br>
 The keywords available are:<br>
-*source - The path to the folder from which to process files<br>
-*target - The path to which the processed data is to be saved<br>
-*file - The path to the file which to process<br>
+*source - The path to the folder from which to process files (optionally surround with " if spaces are present in the filename)<br>
+*target - The path to which the processed data is to be saved (optionally surround with " if spaces are present in the filename)<br>
+*file - The path to the file which to process (optionally surround with " if spaces are present in the filename)<br>
 *start - From which frame the plugin should start (default: 1)<br>
 *end - Till which frame the plugin should run. When set to 0, it will process all frames (default: all frames)<br>
 *window - The window of which the median will be taken (default: 50)<br>

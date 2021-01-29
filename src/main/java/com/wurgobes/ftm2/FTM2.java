@@ -71,6 +71,8 @@ import java.util.*;
 import javax.swing.*;
 import java.awt.event.ActionListener;
 import java.util.concurrent.atomic.DoubleAccumulator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static java.lang.Math.*;
 
@@ -224,11 +226,12 @@ public class FTM2< T extends RealType< T >>  implements Command {
             arg = debug_arg_string;
         }
         if(arg != null && !arg.equals("")){
-            String[] arguments = arg.split(" ");
+            final Pattern pattern = Pattern.compile("(\\w+)=(\"[^\"]+\"|\\S+)");
+            Matcher m = pattern.matcher(arg);
             String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun"};
-            for(String a : arguments) {
-                if (a.contains("=")) {
-                    String[] keyword_val = a.split("=");
+            while (m.find()) {
+                if (m.groupCount() == 2) {
+                    String[] keyword_val = {m.group(1), m.group(2).replace("\"", "")};
                     try {
                         switch (keyword_val[0]) {
                             case "source":
@@ -268,19 +271,12 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 logService.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
                                 return DONE;
                         }
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        if (a.equals("")){
-                            logService.error("Empty token. Are there double spaces in the argument string?");
-                        } else {
-                            logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
-                        }
-                        return DONE;
                     } catch (Exception e){
                         logService.error("Failed to parse argument:" + keyword_val[1]);
                         return DONE;
                     }
                 } else {
-                    logService.error("Malformed token: " + a + ".\nDid you remember to format it as keyword=value?");
+                    logService.error("Malformed token: " + m.toString() + ".\nDid you remember to format it as keyword=value? Entire argument string was:\" + arg");
                     return DONE;
                 }
             }
@@ -314,7 +310,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             gd.addNumericField("End (0 for all)", end, 0);
             gd.addCheckbox("Concatenate Files?", concat);
             gd.addToSameRow();
-            gd.addMessage("This will treat files from the folder/selected files as one large continous dataset if they have the same dimension and bitdepth. Uncheck this to seperately process files with the same settings.");
+            gd.addMessage("This will treat files from the folder/selected files as one large continous dataset if they have the same dimension and bitdepth. Check this to process all files as one.");
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
@@ -400,8 +396,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 for(File file : listOfFiles){
                     if(!file.getName().contains(".tif"))
                         continue;
-                    String command = "file=" + file.getAbsolutePath()
-                            + " target=" + target_dir
+                    String command = "file=\"" + file.getAbsolutePath() + "\""
                             + " start=" + start
                             + " end=" + end
                             + " window=" + window
@@ -410,9 +405,10 @@ public class FTM2< T extends RealType< T >>  implements Command {
                             + " concat=" + true
                             + " show=" + showResults
                             + " hiddenConcatRun=" + true;
+                    if(!target_dir.equals("")) command += " target=" + target_dir;
                     FTM2<T> tempFTM = new FTM2<>(1, opService, logService, command);
                     tempFTM.run();
-                    if(!showResults) tempFTM.ImgPlusReference.close();
+                    if(!showResults && tempFTM.ImgPlusReference != null) tempFTM.ImgPlusReference.close();
                 }
                 logService.info("Finished processing all files seperately");
                 return DONE;
@@ -486,7 +482,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                         }
                     }
                     try {
-                        ImgPlusReference = new Concatenator().concatenateHyperstacks(temp_imgs, "Concatenated", false);
+                        ImgPlusReference = new Concatenator().concatenateHyperstacks(temp_imgs,   temp_imgs[0].getTitle() + "_concatenated", false);
                     } catch (Exception e) {
                         logService.error("One or more of your files might not have the same dimension");
                         return DONE;
@@ -497,6 +493,10 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     try {
                         ImgPlusReference = new Opener().openImage(file_string);
                     } catch (Exception e) {
+                        logService.error("Failed to open file: " + file_string);
+                        return DONE;
+                    }
+                    if(ImgPlusReference == null){
                         logService.error("Failed to open file: " + file_string);
                         return DONE;
                     }
@@ -888,6 +888,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
 
         }
+        debug_arg_string = ""; // Need to reset the string properly
     }
 
 

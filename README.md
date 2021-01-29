@@ -6,7 +6,7 @@ One can get the Plugin by using the download link below, or by subscribing to th
 You can subscribe by going to Help > Update... > Manage Update Sites and checking the Hohlbein lab site.
 It will automatically be downloaded and updated.
 
-Current Version: 0.9.9.8.1  
+Current Version: 0.9.9.9  
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)  
 Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
 The plugin should then show up in the Plugins menu under "Faster Temporal Median".  
@@ -57,9 +57,9 @@ This plugin can also be run from a macro.
 An example: `run("Select Files and Run", "source=C:\C:\Users\Your_Name\your_folder\image_file.tif target=your_folder start=1 end=0 window=50 save_data=0")`  
 All keywords must be provided in the format: `keyword=value`, seperated by spaces.  
 The keywords available are:  
-* source - The path to the folder from which to process files
-* target - The path to which the processed data is to be saved
-* file - The path to the file which to process
+* source - The path to the folder from which to process files (optionally surround with " if spaces are present in the filename)
+* target - The path to which the processed data is to be saved (optionally surround with " if spaces are present in the filename)
+* file - The path to the file which to process (optionally surround with " if spaces are present in the filename)
 * start - From which frame the plugin should start (default: 1)
 * end - Till which frame the plugin should run. When set to 0, it will process all frames (default: all frames)
 * window - The window of which the median will be taken (default: 50)
