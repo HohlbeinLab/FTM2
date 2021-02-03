@@ -376,7 +376,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
 
 
-        if(!concat){
+        if(!concat && type != 3){
             // this is hacky, but works
 
             File[] listOfFiles = {}; //Will contain the list of File objects from either the file select or the folder select
