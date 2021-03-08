@@ -70,4 +70,4 @@ An example macro file is also provided
 ## Developement
 
 This software was developed at the Holhbein Lab, Wageningen University for use in SMLM research.
-It was used as a key step in [a paper by Jabermoradi, A](https://www.biorxiv.org/content/10.1101/2021.03.03.433739v1).
+It was used as a key step in [a paper by Jabermoradi, A](https://doi.org/10.1101/2021.03.03.433739).
