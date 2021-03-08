@@ -49,7 +49,6 @@ import ij.gui.YesNoCancelDialog;
 import net.imagej.ops.OpService;
 
 
-import net.imagej.ops.Ops;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 
@@ -62,7 +61,6 @@ import org.scijava.log.LogService;
 import org.scijava.plugin.Plugin;
 
 
-import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -143,8 +141,6 @@ public class FTM2< T extends RealType< T >>  implements Command {
         this.opService = op;
         this.logService = log;
     }
-
-
 
     public boolean saveImagePlus(final String path, ImagePlus impP){
         //Saves an ImagePlus Object as a tiff at the provided path, returns true if succeeded, false if not

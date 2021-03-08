@@ -66,3 +66,8 @@ The keywords available are:
 * save_data - If the produced data should be saved to disk. If set the target keyword must also be included. (default: 0)
 Note that to run at least either a `source` or a `file` argument must be provided.  
 An example macro file is also provided
+
+## Developement
+
+This software was developed at the Holhbein Lab, Wageningen University for use in SMLM research.
+It was used as a key step in [a paper by Jabermoradi, A](https://www.biorxiv.org/content/10.1101/2021.03.03.433739v1).
