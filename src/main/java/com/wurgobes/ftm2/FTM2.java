@@ -117,6 +117,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
     private final LogService logService;
 
     private static String debug_arg_string = "";
+    private static boolean runningFromMacro = false;
     private static double totalTime = 0;
 
     public ImagePlus ImgPlusReference;
@@ -126,6 +127,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
     private String savingFileName = "";
     private boolean concatRun = false;
+
+    private String extension = "tif";
 
 
     FTM2(int t, OpService op, LogService log, String command){
@@ -214,7 +217,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         String file_string = "";
         target_dir = "";
         File[] selected_files = null;
-        MultiFileSelect fs = new MultiFileSelect();
+        MultiFileSelect fs = new MultiFileSelect(extension);
 
         if(debug_arg_string.equals("")){
             arg = Macro.getOptions();
@@ -222,14 +225,22 @@ public class FTM2< T extends RealType< T >>  implements Command {
             arg = debug_arg_string;
         }
         if(arg != null && !arg.equals("")){
+            runningFromMacro = true;
             final Pattern pattern = Pattern.compile("(\\w+)=(\"[^\"]+\"|\\S+)");
             Matcher m = pattern.matcher(arg);
-            String[] keywords = {"source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun"};
+            String[] keywords = {
+                    "source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun",
+                    "begin", "output", "file_0", "extension"
+            };
             while (m.find()) {
                 if (m.groupCount() == 2) {
                     String[] keyword_val = {m.group(1), m.group(2).replace("\"", "")};
                     try {
                         switch (keyword_val[0]) {
+                            case "file_0":
+                            case "extension":
+                                extension = keyword_val[1];
+                                break;
                             case "source":
                                 source_dir = keyword_val[1];
                                 break;
@@ -239,6 +250,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                             case "target":
                                 target_dir = keyword_val[1];
                                 break;
+                            case "begin":
                             case "start":
                                 start = Integer.parseInt(keyword_val[1]);
                                 break;
@@ -254,14 +266,25 @@ public class FTM2< T extends RealType< T >>  implements Command {
                             case "range":
                                 U32_SIZE = Double.parseDouble(keyword_val[1]);
                                 break;
+                            case "concatenate":
+                                concat = true;
+                                break;
                             case "concat":
                                 concat = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             case "show":
-                                showResults = Boolean.parseBoolean(keyword_val[1]);
+                                if(keyword_val[1].equals(""))
+                                    showResults = true;
+                                else
+                                    showResults = Boolean.parseBoolean(keyword_val[1]);
                                 break;
                             case "hiddenConcatRun":
                                 concatRun = Boolean.parseBoolean(keyword_val[1]);
+                                break;
+                            case "output":
+                                if(!keyword_val[1].equals("[]")){
+                                    target_dir = keyword_val[1];
+                                }
                                 break;
                             default:
                                 logService.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
@@ -276,7 +299,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     return DONE;
                 }
             }
-            if (source_dir.equals("") && file_string.equals("")) {
+
+            if (type != 3 && source_dir.equals("") && file_string.equals("")) {
                 logService.error("Argument string must contain source or file variables.");
                 return DONE;
             }
@@ -310,6 +334,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             gd.addCheckbox("Save Image?", save_data);
             gd.addToSameRow();
             gd.addMessage("Note that datasets larger than allocated ram will always be saved.\nYou can increase this by going to Edit > Options > Memory & Threads");
+            gd.addStringField("File Extension", extension);
             gd.addCheckbox("Show output?", showResults);
             gd.addDirectoryField("Output directory", target_dir, 50);
 
@@ -332,6 +357,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             pre_loaded_image = type == 3;
             concat = gd.getNextBoolean();
             save_data = gd.getNextBoolean();
+            extension = gd.getNextString();
             showResults = gd.getNextBoolean();
             target_dir = gd.getNextString();
         }
@@ -390,7 +416,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
             if(listOfFiles.length > 1){
                 for(File file : listOfFiles){
-                    if(!file.getName().contains(".tif"))
+                    if(!file.getName().contains("." + extension))
                         continue;
                     String command = "file=\"" + file.getAbsolutePath() + "\""
                             + " start=" + start
@@ -460,9 +486,9 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 if(!source_dir.equals("")){
                     File dir = new File(source_dir);
                     for(File file : Objects.requireNonNull(dir.listFiles())){
-                        if(!file.getName().endsWith(".tif")) dirty_folder = true;
+                        if(!file.getName().endsWith("." + extension)) dirty_folder = true;
                     }
-                    checked_files = dir.listFiles((dir1, name) -> name.endsWith(".tif"));
+                    checked_files = dir.listFiles((dir1, name) -> name.endsWith("." + extension));
                     if(dirty_folder) selected_files = checked_files;
                 }
 
@@ -529,7 +555,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     int Stack_no = 0; //Keeps track of how many stacks
                     for (int i = 0; i < listOfFiles.length; i++) {
                         //Check if the File Object is a tif
-                        if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith(".tif")) {
+                        if (listOfFiles[i].isFile() && listOfFiles[i].getName().endsWith("." + extension)) {
                             if(savingFileName.equals(""))
                                 savingFileName = listOfFiles[i].getName();
                             //Load the file into memory as a VirtualStack
@@ -623,11 +649,12 @@ public class FTM2< T extends RealType< T >>  implements Command {
             final double temp_max = min(result[1], U32_SIZE);
 
             if ((abs(imageData.firstElement().getRealFloat())%1.0> 0.0 |result[1] > U32_SIZE )) {
-                if(abs(imageData.firstElement().getRealFloat())%1.0> 0.0)
-                    IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
-                else
-                    IJ.showMessage("An image with 32b values above 16.777.216,0 was deteced.\nThis range is not fully.\nThis might lead to data precision loss");
-
+                if(!runningFromMacro) {
+                    if (abs(imageData.firstElement().getRealFloat()) % 1.0 > 0.0)
+                        IJ.showMessage("An image with 32b float values was detected.\nThis might lead to data precision loss.\nConsider converting the data to 32b Integer.");
+                    else
+                        IJ.showMessage("An image with 32b values above 16.777.216,0 was deteced.\nThis range is not fully.\nThis might lead to data precision loss");
+                }
                 // This method only supports integer values
                 // 32b images can be float however
                 // this creates a mapping from the original values between 0 and U32_SIZE
@@ -644,7 +671,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             //This step does not cause precision loss
 
             imageData = (Img<T>) opService.convert().uint32(imageData);
-        } else if( bit_depth == 32) {
+        } else if( bit_depth == 32 && !runningFromMacro) {
             IJ.showMessage("A 32b image was detected.\nIf this is a float image, it might lead to precision loss.\nIf the image contains integer values, ensure the maximum value does not exceed 6.777.216,0.");
         }
 
@@ -794,8 +821,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //If it fails, error
                     //Saving time is recorded since it might indicate to an end user their drive is the limiting factor
                     intertime = System.nanoTime();
-                    if (!saveImagePlus(Paths.get(target_dir, "/" + savingFileName + "_" + (k + 1) + ".tif").toString(), new ImagePlus("", final_stack))) {
-                        logService.error("Failed to write to:" +Paths.get(target_dir, "/part_" + (k + 1) + ".tif").toString());
+                    if (!saveImagePlus(Paths.get(target_dir, "/" + savingFileName + "_" + (k + 1) + "." + extension).toString(), new ImagePlus("", final_stack))) {
+                        logService.error("Failed to write to:" +Paths.get(target_dir, "/part_" + (k + 1) + "." + extension).toString());
                         System.exit(0);
                     }
                     savingTime += (System.nanoTime() - intertime);
@@ -809,7 +836,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                     //This is not able to be done in a single window afaik
                     //The contrast command is to ensure the visualisation is correct since the min and max changed.
                     for (int k = 0; k < brackets.size(); k++) {
-                        IJ.openVirtual(target_dir + "/" + savingFileName + "_"   + (k + 1) + ".tif").show();
+                        IJ.openVirtual(target_dir + "/" + savingFileName + "_"   + (k + 1) + "." + extension).show();
                         IJ.run("Enhance Contrast", "saturated=0.0");
                     }
                 }
@@ -856,9 +883,9 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 if (save_data) {
                     String saveName;
                     if(concat)
-                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected.tif").toString();
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected." + extension).toString();
                     else
-                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected_concatenated.tif").toString();
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected_concatenated." + extension).toString();
                     if(!saveImagePlus(saveName, ImgPlusReference)) {
                         logService.error("Failed to write to:" + saveName);
                     }
@@ -880,7 +907,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             logService.info("Processed " + (end - start + 1) + " frames at " + String.format("%.1f", (total_disk_size / (1024 * 1024) / spendTime)) + " MB/s");
 
             IJ.showStatus("Finished Processing!");
-            if(!concatRun)
+            if(!concatRun && !runningFromMacro)
                 IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
 
         }
@@ -895,24 +922,24 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
 
 
-        //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file.tif");
+        //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file." + extension);
 
         //imp.show();
        // String target_folder = "F:\\ThesisData\\output";
         String target_folder = "C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";
-        //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif target=" + target_folder + " save_data=true";
-        //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
-        //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest.tif";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise.tif";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true target=" + target_folder;
+        //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest." + extension;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise." + extension;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.  + extensionsave_data=true target=" + target_folder;
 
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8.tif";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8." + extension;
 
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.  + extensionstart=100 end=200";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.  + extensionsave_data=true target=" + target_folder;
         debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder concat=false save_data=true show=false target=" + target_folder;
-        //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file.tif";
+        //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file." + extension;
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
 
@@ -1016,8 +1043,14 @@ class levenshtein {
 }
 
 class MultiFileSelect implements ActionListener {
-
+    String extension = ".tif";
     File[] files = null;
+
+
+
+    MultiFileSelect(String extension){
+        this.extension = extension;
+    }
 
     @Override
     public void actionPerformed(ActionEvent e) {
@@ -1031,8 +1064,8 @@ class MultiFileSelect implements ActionListener {
 
                 notDone = false;
                 for(File file : files){
-                    if(!file.getName().endsWith(".tif")){
-                        IJ.showMessage("Cannot select non-tif files: " + file.getName());
+                    if(!file.getName().endsWith("." + extension)){
+                        IJ.showMessage("Incorrect Extension: " + file.getName());
                         notDone = true;
                     }
                 }
