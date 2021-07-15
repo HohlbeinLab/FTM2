@@ -129,6 +129,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
     private boolean concatRun = false;
 
     private String extension = "tif";
+    private String argBackup = "";
 
 
     FTM2(int t, OpService op, LogService log, String command){
@@ -225,16 +226,17 @@ public class FTM2< T extends RealType< T >>  implements Command {
             arg = debug_arg_string;
         }
         if(arg != null && !arg.equals("")){
+
             runningFromMacro = true;
-            final Pattern pattern = Pattern.compile("(\\w+)=(\"[^\"]+\"|\\S+)");
+            final Pattern pattern = Pattern.compile("(\\w+)(=(\"[^\"]+\"|\\S+))?");
             Matcher m = pattern.matcher(arg);
             String[] keywords = {
                     "source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun",
                     "begin", "output", "file_0", "extension"
             };
             while (m.find()) {
-                if (m.groupCount() == 2) {
-                    String[] keyword_val = {m.group(1), m.group(2).replace("\"", "")};
+                if (m.groupCount() == 3) {
+                    String[] keyword_val = {m.group(1), m.group(3) != null ? m.group(3).replace("\"", "") : String.valueOf(false)};
                     try {
                         switch (keyword_val[0]) {
                             case "file_0":
@@ -287,7 +289,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                                 }
                                 break;
                             default:
-                                logService.error("Keyword " + keyword_val[0] + " not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?");
+                                logService.error("Keyword '" + keyword_val[0] + "' not found\nDid you mean: " + getTheClosestMatch(keywords, keyword_val[0]) + "?\nOr did you forget quotes(\") around the filepath?");
                                 return DONE;
                         }
                     } catch (Exception e){
@@ -295,7 +297,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                         return DONE;
                     }
                 } else {
-                    logService.error("Malformed token: " + m.toString() + ".\nDid you remember to format it as keyword=value? Entire argument string was:\" + arg");
+                    logService.error("Malformed argument String. Did you remember to format it as keyword=value and wrap filepaths with quotes? Entire argument string was:" + arg);
                     return DONE;
                 }
             }
@@ -309,10 +311,10 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 logService.error("When saving is enabled, a target directory must be provided");
                 return DONE;
             }
+
         } else {
             InputStream is = FTM2.class.getResourceAsStream("/README.txt"); // OK
             String content = GetInputStream(is);
-
 
 
             //Custom class that allows a button to select multiple files using a JFilechooser as GenericDialog doesn't suppor this
@@ -414,20 +416,26 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 return DONE;
             }
 
+
             if(listOfFiles.length > 1){
+                String constantCommand = " start=" + start
+                        + " end=" + end
+                        + " window=" + window
+                        + " save_data=" + save_data
+                        + " range=" + U32_SIZE
+                        + " concat=" + true
+                        + " show=" + showResults
+                        + " hiddenConcatRun=" + true;
+
                 for(File file : listOfFiles){
                     if(!file.getName().contains("." + extension))
                         continue;
+
                     String command = "file=\"" + file.getAbsolutePath() + "\""
-                            + " start=" + start
-                            + " end=" + end
-                            + " window=" + window
-                            + " save_data=" + save_data
-                            + " range=" + U32_SIZE
-                            + " concat=" + true
-                            + " show=" + showResults
-                            + " hiddenConcatRun=" + true;
-                    if(!target_dir.equals("")) command += " target=" + target_dir;
+                            + constantCommand;
+
+                    if(!target_dir.equals("")) command += " target=\"" + target_dir + "\"";
+
                     FTM2<T> tempFTM = new FTM2<>(1, opService, logService, command);
                     tempFTM.run();
                     if(!showResults && tempFTM.ImgPlusReference != null) tempFTM.ImgPlusReference.close();
@@ -699,7 +707,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
     //If DONE is returned by setup, it does not run the run function
     @Override
     public void run() {
-        logService.info("Faster Temporal Median");
+        logService.info("Fast Temporal Median 2");
         ImagePlus openImage = WindowManager.getCurrentImage();
         if(setup(openImage) != DONE) {
 
@@ -845,7 +853,6 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                 long interTime = System.nanoTime();
                 //Then process the data, either on the smaller view or the entire dataset
-
                 TemporalMedian.main(imageData, window, bit_depth, start - 1, end);
 
                 stopTime = System.nanoTime() - interTime;
@@ -873,7 +880,11 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                 if(showResults) {
                     ImgPlusReference.show();
-                    ImgPlusReference.setTitle(ImgPlusReference.getTitle() + "_median_corrected");
+                    String title = ImgPlusReference.getTitle();
+                    if (title.endsWith("." + extension)) {
+                        title = title.substring(0, title.length() - 1 - extension.length());
+                    }
+                    ImgPlusReference.setTitle(title + "_median_corrected");
 
                     //Run the contrast command to readjust the min and max
                     IJ.run("Enhance Contrast", "saturated=0.0");
@@ -881,11 +892,13 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                 //If needed try to save the data
                 if (save_data) {
+
                     String saveName;
                     if(concat)
-                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected." + extension).toString();
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - (showResults ? 0 : 4)).replace(" ", "_") + (showResults ? "" : "_Median_corrected") + "." + extension).toString();
                     else
-                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - 4).replace(" ", "_") + "_Median_corrected_concatenated." + extension).toString();
+                        saveName = Paths.get(target_dir, ImgPlusReference.getTitle().substring(0, ImgPlusReference.getTitle().length() - (showResults ? 0 : 4)).replace(" ", "_") + (showResults ? "" : "_Median_corrected")  + "_concatenated." + extension).toString();
+
                     if(!saveImagePlus(saveName, ImgPlusReference)) {
                         logService.error("Failed to write to:" + saveName);
                     }
@@ -911,6 +924,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 IJ.showMessage("Finished Applying Faster Temporal Median.\nProcessed " + (end - start + 1) + " frames in " + String.format("%.3f", allTime) + " seconds.");
 
         }
+
         debug_arg_string = ""; // Need to reset the string properly
     }
 
@@ -926,7 +940,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //imp.show();
        // String target_folder = "F:\\ThesisData\\output";
-        String target_folder = "C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\output";
+        String target_folder = "H:\\ThesisData\\folder with a space";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
@@ -938,7 +952,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.  + extensionstart=100 end=200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.  + extensionsave_data=true target=" + target_folder;
-        debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder concat=false save_data=true show=false target=" + target_folder;
+        debug_arg_string = "source=\"H:\\ThesisData\\test_images\\Issue_3 test\" concat=false save_data=true show=true target=\"" + target_folder + "\"";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file." + extension;
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
