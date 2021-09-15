@@ -31,12 +31,12 @@ SOFTWARE.
 
 public class MedianHistogram {
 
-    private final int[] hist; //Gray-level histogram init at 0
+    public final int[] hist; //Gray-level histogram init at 0
 
     private int median;//The median of this pixel
     private int aux;   //Marks the position of the median pixel in the column of the histogram, starting with 1
 
-    private final int[] history; //Keeps track of the last windox pixels
+    public final int[] history; //Keeps track of the last windox pixels
     private int hi; //Keeps track of the index of next pixel to overwrite
 
 

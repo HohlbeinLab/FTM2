@@ -380,13 +380,13 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
 
         //If it contains backwards slashes, replace them with forward ones
-        if(!pre_loaded_image && selected_files == null){
+        if(!pre_loaded_image && selected_files == null && !source_dir.equals("")){
             source_dir = source_dir.replace('\\', '/');
             if (!source_dir.endsWith("/")) source_dir += "/";
         }
 
         //The source directory doesn't exist, so we error
-        if(selected_files == null && !pre_loaded_image && !(new File(source_dir)).exists()){
+        if(selected_files == null && !pre_loaded_image && !(new File(source_dir)).exists() && file_string.equals("")){
             logService.error("Error: source directory " + source_dir + " does not exist.");
             return DONE;
         }
@@ -398,6 +398,9 @@ public class FTM2< T extends RealType< T >>  implements Command {
             }
         }
 
+        if(source_dir.equals("") && !file_string.equals("")) {
+            concat = true;
+        }
 
 
         if(!concat && type != 3){
@@ -407,7 +410,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
             if (selected_files == null){//Selected files will be a File[] that contains preselected files
                 listOfFiles = new File(source_dir).listFiles();
-            } else if (file_string.equals("")){//File string is an object that can be passed from the command line
+            } else if (file_string.equals("")){ //File string is an object that can be passed from the command line
                 listOfFiles = selected_files;
             }
 
@@ -436,6 +439,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
                     if(!target_dir.equals("")) command += " target=\"" + target_dir + "\"";
 
+                    logService.info("Processing file: " + file.getAbsolutePath());
+
                     FTM2<T> tempFTM = new FTM2<>(1, opService, logService, command);
                     tempFTM.run();
                     if(!showResults && tempFTM.ImgPlusReference != null) tempFTM.ImgPlusReference.close();
@@ -456,7 +461,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
                 listOfFiles = selected_files;
             }
 
-            if(listOfFiles == null || listOfFiles.length == 0){
+            if((listOfFiles == null || listOfFiles.length == 0) && file_string.equals("")){
                 logService.error("Folder is empty");
                 return DONE;
             }
@@ -940,19 +945,19 @@ public class FTM2< T extends RealType< T >>  implements Command {
 
         //imp.show();
        // String target_folder = "F:\\ThesisData\\output";
-        String target_folder = "H:\\ThesisData\\folder with a space";
-        //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
-        //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
-        //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.  + extensiontarget=" + target_folder + " save_data=true";
+        String target_folder = "\"L:\\ThesisData\\folder with a space\"";
+        //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
+        //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32btest." + extension;
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise." + extension;
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.  + extensionsave_data=true target=" + target_folder;
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true target=" + target_folder;
 
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack8." + extension;
+        debug_arg_string = "file=\"L:\\ThesisData\\test_images\\tiny_stack.tif\" show=true window=5 save_data=true target=" + target_folder;
 
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.  + extensionstart=100 end=200";
-        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.  + extensionsave_data=true target=" + target_folder;
-        debug_arg_string = "source=\"H:\\ThesisData\\test_images\\Issue_3 test\" concat=false save_data=true show=true target=\"" + target_folder + "\"";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
+        //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
+        //debug_arg_string = "source=\"H:\\ThesisData\\test_images\\Issue_3 test\" concat=false save_data=true show=true target=\"" + target_folder + "\"";
         //debug_arg_string = "file=F:\\ThesisData\\input2\\tiff_file." + extension;
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack";
         //debug_arg_string = "source=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\test_folder";
