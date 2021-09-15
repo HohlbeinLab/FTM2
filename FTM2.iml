@@ -204,5 +204,6 @@
     <orderEntry type="library" name="Maven: sc.fiji:fiji-lib:2.1.2" level="project" />
     <orderEntry type="library" name="Maven: net.imagej:ij1-patcher:1.1.0" level="project" />
     <orderEntry type="library" name="Maven: org.javassist:javassist:3.27.0-GA" level="project" />
+    <orderEntry type="library" name="Maven: org.jetbrains:annotations:13.0" level="project" />
   </component>
 </module>

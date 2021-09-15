@@ -6,7 +6,7 @@ One can get the Plugin by using the download link below, or by subscribing to th
 You can subscribe by going to Help > Update... > Manage Update Sites and checking the Hohlbein lab site.
 It will automatically be downloaded and updated.
 
-Current Version: 0.10.3
+Current Version: 0.10.4
 Download [Here](https://github.com/HohlbeinLab/FTM2/releases/latest)  
 Once downloaded it can be installed by launching ImageJ > Plugins > Install... Selecting the downloaded jar and restarting ImageJ.  
 The plugin should then show up in the Plugins menu under "Faster Temporal Median".  

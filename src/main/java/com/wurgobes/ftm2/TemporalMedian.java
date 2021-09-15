@@ -25,8 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Iterator;
 import java.util.concurrent.atomic.DoubleAccumulator;
@@ -57,12 +55,7 @@ public class TemporalMedian {
         final int pixels = imgw * imgh; // Total amount of pixels
         final int zSize = min((int) img.dimension(2), end);
         final int zSteps = zSize - window;
-
-        System.out.println("window: " + window);
-        System.out.println("offset: " + offset);
-        System.out.println("end: " + end);
-        System.out.println("zSteps: " + zSteps);
-        System.out.println("windowC: " + windowC);
+        final int modifier = (window % 2 == 1 ? 1 : 0);
 
         final int coreCount = Prefs.getThreads();
 
@@ -103,16 +96,6 @@ public class TemporalMedian {
                     front.setPosition(pos); // Set the starting position for the front
                     back.setPosition(pos); // Set the starting position for the back
 
-                    if(j == 0){
-                        int[] all_values = new int[10];
-                        for(int i = 0; i < 10; i++){
-                            all_values[i] = rankmap.fromRanked(front.get().getInteger());
-                            front.fwd(2);
-                        }
-                        System.out.println("All values: " + Arrays.toString(all_values));
-                        front.setPosition(pos);
-                    }
-
                     // read the first window ranked pixels into median filter
 
                     for (int i = 0; i < window; i++) {
@@ -126,9 +109,6 @@ public class TemporalMedian {
                     // write current median for windowC+1 pixels
                     for (int i = 0; i < windowC; i++) {
                         final U t = back.get(); // Get the reference to the back's pixel
-                        if(j == 0){
-                            System.out.println(i + " " + Arrays.toString(back.positionAsDoubleArray()) + ": "+ (Math.max(t.getInteger() - temp_median, 0)) + " from " + t.getInteger()  + "-" + temp_median + " from " + Arrays.toString(rankmap.fromRanked(median.history)));
-                        }
                         t.setInteger(Math.max(t.getInteger() - temp_median, 0)); // Set the back's value, median adjusted
 
                         back.fwd(2); // Move the back one forward in the z dimension to the next slice
@@ -139,21 +119,15 @@ public class TemporalMedian {
                         median.add(front.get().getInteger());
                         front.fwd(2); // Move the front one forward in the 2nd dimension to the next slice
                         final U t = back.get(); // Get the reference to the back's pixel
-                        if(j == 0){
-                            System.out.println(i + " " + Arrays.toString(back.positionAsDoubleArray()) + ": " + (Math.max(t.getInteger() - rankmap.fromRanked( median.get()), 0)) + " from " + t.getInteger()  + "-" + rankmap.fromRanked( median.get()) + " from " + Arrays.toString(rankmap.fromRanked(median.history)));
-                        }
                         t.setInteger(Math.max(t.getInteger() - rankmap.fromRanked( median.get()), 0)); // Set the back's value, median adjusted
                         back.fwd(2); // Move the front one forward in the z dimension to the next slice
                     }
 
                     temp_median = rankmap.fromRanked(median.get());
                     // write current median for windowC pixels
-                    for (int i = 0; i < windowC - 1; i++) {
+                    for (int i = 0; i < windowC - modifier; i++) {
                         final U t = back.get(); // Get the reference to the back's pixel
                         t.setInteger(Math.max(t.getInteger() - temp_median, 0)); // Set the back's value, median adjusted
-                        if(j == 0){
-                            System.out.println(i + " " + Arrays.toString(back.positionAsDoubleArray()) + ": " + (Math.max(t.getInteger() - temp_median, 0)) + " from " + t.getInteger()  + "-" + temp_median + " from " + Arrays.toString(rankmap.fromRanked(median.history)));
-                        }
                         back.fwd(2); // Move the back one forward in the 2nd dimension to the next slice
                     }
 
@@ -241,14 +215,6 @@ public class TemporalMedian {
 
         public int fromRanked(final int in) {
             return rankedToInput[in];
-        }
-
-        public int[] fromRanked(final int[] in) {
-            int[] returnVals = new int[in.length];
-            for(int i = 0; i < in.length; i++){
-                returnVals[i] = rankedToInput[in[i]];
-            }
-            return returnVals;
         }
 
         public int getMaxRank() {
