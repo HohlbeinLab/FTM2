@@ -228,7 +228,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         if(arg != null && !arg.equals("")){
 
             runningFromMacro = true;
-            final Pattern pattern = Pattern.compile("(\\w+)(=(\"[^\"]+\"|\\S+))?");
+            final Pattern pattern = Pattern.compile("(\\w+)(=('[^']+'|\\S+))?");
             Matcher m = pattern.matcher(arg);
             String[] keywords = {
                     "source", "file","target", "start", "end", "window", "save_data", "range", "concat", "show", "hiddenConcatRun",
@@ -236,7 +236,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
             };
             while (m.find()) {
                 if (m.groupCount() == 3) {
-                    String[] keyword_val = {m.group(1), m.group(3) != null ? m.group(3).replace("\"", "") : String.valueOf(false)};
+                    String[] keyword_val = {m.group(1), m.group(3) != null ? m.group(3).replace("'", "") : String.valueOf(false)};
                     try {
                         switch (keyword_val[0]) {
                             case "file_0":
@@ -944,8 +944,8 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //ImagePlus imp = IJ.openImage("F:\\ThesisData\\input2\\tiff_file." + extension);
 
         //imp.show();
-       // String target_folder = "F:\\ThesisData\\output";
-        String target_folder = "\"L:\\ThesisData\\folder with a space\"";
+        // String target_folder = "F:\\ThesisData\\output";
+        String target_folder = "'I:\\ThesisData\\folder with a space'";
         //debug_arg_string = "file=F:\\ThesisData\\input4\\tiff_file.tif=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input8_large\\tiff_file.tif target=" + target_folder + " save_data=true";
         //debug_arg_string = "file=F:\\ThesisData\\input32_large\\tiff_file.tif target=" + target_folder + " save_data=true";
@@ -953,7 +953,7 @@ public class FTM2< T extends RealType< T >>  implements Command {
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\32bnoise." + extension;
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack32.tif save_data=true target=" + target_folder;
 
-        debug_arg_string = "file=\"L:\\ThesisData\\test_images\\tiny_stack.tif\" show=true window=5 save_data=true target=" + target_folder;
+        debug_arg_string = "file='I:\\ThesisData\\folder with a space\\stack_small1_median_corrected.tif' show=true window=5 save_data=true target=" + target_folder;
 
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\stack_small.tif start=100 end=200";
         //debug_arg_string = "file=C:\\Users\\Martijn\\Desktop\\Thesis2020\\ImageJ\\test_images\\large_stack\\large_stack.tif save_data=true target=" + target_folder;
