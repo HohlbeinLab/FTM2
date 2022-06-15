@@ -67,6 +67,10 @@ The keywords available are:
 Note that to run at least either a `source` or a `file` argument must be provided.  
 An example macro file is also provided
 
+## Citation
+
+If you use this software to analyse your data please link to the GitHub page.
+
 ## Developement
 
 This software was developed at the Holhbein Lab, Wageningen University for use in SMLM research.
